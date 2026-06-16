@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import json
@@ -252,8 +252,8 @@ def init_db():
         
         c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1")
         if c.fetchone()[0] == 0:
-            c.execute("INSERT INTO users (username, password, coins, is_admin, created_at, last_wheel_date) VALUES (?,?,?,?,?,?)",
-                      ("admin", "250734382", 1000000, 1, datetime.now().isoformat(), "2000-01-01"))
+            c.execute("INSERT INTO users (id, username, password, coins, is_admin, created_at, last_wheel_date) VALUES (?,?,?,?,?,?,?)",
+                      (1, "admin", "250734382", 1000000, 1, datetime.now().isoformat(), "2000-01-01"))
 
 # ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
 @app.route('/static/images/<path:filename>')
@@ -282,37 +282,97 @@ def miniapp_login():
         user_id = data.get('user_id')
         username = data.get('username')
         
+        # Проверка: если юзернейм = ArtCSbotSupp → даём админку
+        is_admin = (username == "ArtCSbotSupp")
+        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT id, username, is_admin FROM users WHERE id=?", (user_id,)).fetchone()
+            
             if user:
-                c.execute("UPDATE users SET last_activity=?, username=? WHERE id=?", 
-                         (datetime.now().isoformat(), username, user_id))
-                return jsonify({"success": True, "user_id": user_id, "username": username, "is_admin": user[2]})
+                if user[2] != is_admin:
+                    c.execute("UPDATE users SET is_admin=?, username=?, last_activity=? WHERE id=?", 
+                             (is_admin, username, datetime.now().isoformat(), user_id))
+                else:
+                    c.execute("UPDATE users SET last_activity=?, username=? WHERE id=?", 
+                             (datetime.now().isoformat(), username, user_id))
+                
+                return jsonify({
+                    "success": True, 
+                    "user_id": user_id, 
+                    "username": username, 
+                    "is_admin": is_admin or user[2]
+                })
             else:
-                c.execute("INSERT INTO users (id, username, created_at, last_wheel_date, last_activity) VALUES (?,?,?,?,?)",
-                         (user_id, username, datetime.now().isoformat(), "2000-01-01", datetime.now().isoformat()))
-                return jsonify({"success": True, "user_id": user_id, "username": username, "is_admin": False})
+                c.execute("""
+                    INSERT INTO users (id, username, is_admin, coins, level, exp, created_at, last_wheel_date, last_activity) 
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    user_id, 
+                    username, 
+                    is_admin, 
+                    500,
+                    1,
+                    0,
+                    datetime.now().isoformat(),
+                    "2000-01-01",
+                    datetime.now().isoformat()
+                ))
+                return jsonify({
+                    "success": True, 
+                    "user_id": user_id, 
+                    "username": username, 
+                    "is_admin": is_admin
+                })
     except Exception as e:
+        print(f"Login error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/miniapp_profile', methods=['GET'])
 def miniapp_profile():
     try:
         user_id = request.args.get('user_id')
+        print(f"Profile request for user: {user_id}")
+        
+        if not user_id:
+            return jsonify({"error": "No user_id"}), 400
+        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            c.execute("SELECT coins, level, exp, pvp_wins, pvp_losses, wheel_spins FROM users WHERE id=?", (user_id,))
+            c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins FROM users WHERE id=?", (user_id,))
             user = c.fetchone()
+            
             if user:
                 referrals = c.execute("SELECT COUNT(*) FROM users WHERE referred_by=?", (user_id,)).fetchone()[0]
+                
                 return jsonify({
-                    "coins": user[0], "level": user[1], "exp": user[2],
-                    "wins": user[3], "losses": user[4], "wheel_spins": user[5],
+                    "id": user[0],
+                    "username": user[1],
+                    "coins": user[2] or 0,
+                    "level": user[3] or 1,
+                    "exp": user[4] or 0,
+                    "wins": user[5] or 0,
+                    "losses": user[6] or 0,
+                    "wheel_spins": user[7] or 0,
                     "referrals": referrals
                 })
-            return jsonify({"error": "User not found"}), 404
+            else:
+                c.execute("INSERT INTO users (id, username, coins, level, created_at, last_wheel_date) VALUES (?,?,?,?,?,?)",
+                         (user_id, "player", 500, 1, datetime.now().isoformat(), "2000-01-01"))
+                conn.commit()
+                return jsonify({
+                    "id": user_id,
+                    "username": "player",
+                    "coins": 500,
+                    "level": 1,
+                    "exp": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "wheel_spins": 1,
+                    "referrals": 0
+                })
     except Exception as e:
+        print(f"Profile error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/miniapp_inventory', methods=['GET'])
