@@ -1,1 +1,385 @@
+/* static/css/style.css */
 
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f5f7fa;
+    color: #1a1a2e;
+    min-height: 100vh;
+    padding: 12px;
+    padding-bottom: 80px;
+    overflow-x: hidden;
+}
+
+/* ============ ЭКРАНЫ ============ */
+.screen {
+    display: none;
+}
+
+.screen.active {
+    display: block;
+}
+
+/* ============ ХЕДЕР ============ */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0 16px 0;
+    border-bottom: 2px solid #e8ecf0;
+}
+
+.balance {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a5276;
+}
+
+.balance img {
+    width: 32px;
+    height: 32px;
+}
+
+.profile-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid #1a5276;
+    overflow: hidden;
+    cursor: pointer;
+    background: white;
+    transition: transform 0.2s;
+}
+
+.profile-btn:active {
+    transform: scale(0.92);
+}
+
+.profile-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ============ ГЛАВНЫЙ ЭКРАН ============ */
+.welcome-text {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a5276;
+    text-align: center;
+    padding: 16px 0 8px 0;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 18px 12px;
+    text-align: center;
+    border: 2px solid #e8ecf0;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.card:active {
+    transform: scale(0.95);
+    border-color: #1a5276;
+}
+
+.card-icon {
+    font-size: 32px;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.card-sub {
+    font-size: 11px;
+    color: #7a7a8e;
+}
+
+/* ============ ЗАГОЛОВКИ СТРАНИЦ ============ */
+.page-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a5276;
+    padding: 8px 0 16px 0;
+}
+
+.modal-close {
+    font-size: 28px;
+    cursor: pointer;
+    color: #7a7a8e;
+    background: none;
+    border: none;
+    padding: 0 8px;
+}
+
+.modal-close:hover {
+    color: #1a5276;
+}
+
+/* ============ КНОПКИ ============ */
+.case-btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    margin: 8px 0;
+    border: 2px solid #d0d5dd;
+    border-radius: 12px;
+    background: white;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a2e;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.case-btn:active {
+    transform: scale(0.97);
+}
+
+.case-btn.primary {
+    background: #1a5276;
+    color: white;
+    border-color: #1a5276;
+}
+
+.case-btn.primary:active {
+    background: #154360;
+}
+
+/* ============ ИНВЕНТАРЬ ============ */
+.inventory-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: white;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    border: 1px solid #e8ecf0;
+}
+
+.inventory-item .name {
+    font-weight: 500;
+    color: #1a1a2e;
+    flex: 1;
+}
+
+.inventory-item .price {
+    color: #1a5276;
+    font-weight: 600;
+    margin: 0 12px;
+}
+
+.inventory-item .actions {
+    display: flex;
+    gap: 8px;
+}
+
+.inventory-item .actions button {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-sell {
+    background: #1a5276;
+    color: white;
+}
+
+.btn-sell:active {
+    background: #154360;
+}
+
+.btn-withdraw {
+    background: transparent;
+    color: #1a5276;
+    border: 1px solid #1a5276;
+}
+
+.btn-withdraw:active {
+    background: #e8ecf0;
+}
+
+/* ============ ПРОФИЛЬ ============ */
+.profile-field {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: white;
+    border-radius: 12px;
+    margin-bottom: 6px;
+    border: 1px solid #e8ecf0;
+}
+
+.profile-field .label {
+    color: #7a7a8e;
+}
+
+.profile-field .value {
+    color: #1a1a2e;
+    font-weight: 500;
+}
+
+/* ============ КОЛЕСО ============ */
+.wheel-status {
+    text-align: center;
+    padding: 20px;
+    font-size: 18px;
+    color: #7a7a8e;
+}
+
+/* ============ PVP ============ */
+.pvp-case-select {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.pvp-case-select span {
+    color: #7a7a8e;
+    font-weight: 500;
+}
+
+.pvp-case-select .case-btn {
+    flex: 1;
+    padding: 12px;
+    margin: 0;
+}
+
+.pvp-status {
+    text-align: center;
+    padding: 12px;
+    color: #7a7a8e;
+}
+
+.pvp-result {
+    text-align: center;
+    padding: 12px;
+    color: #1a5276;
+    font-weight: 600;
+    font-size: 18px;
+}
+
+/* ============ МОДАЛЬНОЕ ОКНО ============ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 24px;
+    padding: 24px;
+    max-width: 380px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+
+.modal-content .modal-close {
+    float: right;
+}
+
+.modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a5276;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+/* ============ СКРОЛЛ ============ */
+.scrollable {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+::-webkit-scrollbar {
+    width: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1a5276;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* ============ ЗАГРУЗКА ============ */
+.loading {
+    text-align: center;
+    padding: 30px;
+    color: #7a7a8e;
+}
+
+/* ============ АНИМАЦИЯ КЕЙСА ============ */
+.case-animation {
+    text-align: center;
+    padding: 30px 0;
+}
+
+.case-animation .icon {
+    font-size: 64px;
+    display: block;
+    animation: bounce 0.6s infinite alternate;
+}
+
+@keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-20px); }
+}
+
+.case-result {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    padding: 12px 0;
+    color: #1a5276;
+}
