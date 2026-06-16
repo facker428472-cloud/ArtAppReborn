@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: artappreborn
+    runtime: python
+    plan: free
+    pythonVersion: 3.11.8
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
