@@ -3,4 +3,4 @@ flask-cors==4.0.0
 requests==2.31.0
 gunicorn==21.2.0
 Werkzeug==2.3.7
-Python==3.11.10
+Python-3.11
