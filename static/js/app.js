@@ -47,6 +47,7 @@ function loginOrRegister(uid, uname) {
             
             if (isAdmin) {
                 document.getElementById('adminPanel').style.display = 'block';
+                localStorage.setItem('isAdmin', 'true');
             }
             
             loadBalance();
@@ -265,8 +266,16 @@ function loadProfile() {
             return;
         }
         
+        const isAdminUser = data.is_admin || false;
+        const adminBadge = isAdminUser ? '👑' : '';
+        const verifiedBadge = isAdminUser ? '✅' : '';
+        const adminText = isAdminUser ? '⭐ Подтверждённый аккаунт' : '';
+        
         content.innerHTML = `
-            <div style="text-align:center;font-size:32px;font-weight:700;color:#1a5276;padding:8px 0;">${data.username || username}</div>
+            <div style="text-align:center;font-size:32px;font-weight:700;color:#1a5276;padding:8px 0;">
+                ${data.username || username} ${verifiedBadge} ${adminBadge}
+            </div>
+            <div style="text-align:center;font-size:14px;color:#7a7a8e;padding:4px 0;">${adminText}</div>
             <div class="profile-field"><span class="label">Telegram ID</span><span class="value">${userId}</span></div>
             <div style="text-align:center;font-size:24px;font-weight:700;color:#1a5276;padding:4px 0;">${data.coins || 0} coins</div>
             <div class="profile-field"><span class="label">Level</span><span class="value">${data.level || 1}</span></div>
@@ -281,6 +290,10 @@ function loadProfile() {
                 <button class="case-btn" onclick="logout()">LOGOUT</button>
             </div>
         `;
+        
+        if (isAdminUser) {
+            document.getElementById('adminPanel').style.display = 'block';
+        }
     })
     .catch(err => {
         console.error('Profile error:', err);
@@ -514,9 +527,11 @@ function loadAchievements() {
     });
 }
 
-// ============ АДМИН-ПАНЕЛЬ (60+ ФУНКЦИЙ) ============
+// ============ АДМИН-ПАНЕЛЬ ============
 function loadAdminPanel() {
-    if (!isAdmin) {
+    const adminFromStorage = localStorage.getItem('isAdmin') === 'true';
+    
+    if (!isAdmin && !adminFromStorage) {
         document.getElementById('adminContent').innerHTML = '<div style="text-align:center;color:#c0392b;">Access denied</div>';
         return;
     }
