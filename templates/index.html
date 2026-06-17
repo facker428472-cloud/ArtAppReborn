@@ -5,168 +5,177 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ArtDrop CS2</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <div id="app">
-        <!-- Главный экран -->
+        <!-- ============ ГЛАВНЫЙ ЭКРАН ============ -->
         <div id="main-screen" class="screen active">
             <div class="header">
                 <div class="balance" id="balanceDisplay">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="coinsValue">0</span>
                 </div>
                 <div class="profile-btn" onclick="showScreen('profile')">
-                    <img src="{{ url_for('static', filename='images/profile.png') }}" alt="profile">
+                    <img src="/images/profile.png" alt="profile">
                 </div>
             </div>
-            <div class="welcome-text">WELCOME</div>
+            <div class="welcome-text" data-i18n="welcome">ДОБРО ПОЖАЛОВАТЬ</div>
             <div class="grid">
                 <div class="card" onclick="showScreen('cases')">
                     <div class="card-icon">🎁</div>
-                    <div class="card-title">CASES</div>
-                    <div class="card-sub">Open skins</div>
+                    <div class="card-title" data-i18n="cases">КЕЙСЫ</div>
+                    <div class="card-sub">Открыть скины</div>
                 </div>
                 <div class="card" onclick="showScreen('inventory')">
                     <div class="card-icon">📦</div>
-                    <div class="card-title">INVENTORY</div>
-                    <div class="card-sub">Your items</div>
+                    <div class="card-title" data-i18n="inventory">ИНВЕНТАРЬ</div>
+                    <div class="card-sub">Ваши предметы</div>
                 </div>
                 <div class="card" onclick="showScreen('pvp')">
                     <div class="card-icon">⚔️</div>
-                    <div class="card-title">PVP</div>
-                    <div class="card-sub">Battle</div>
+                    <div class="card-title" data-i18n="pvp">ПВП</div>
+                    <div class="card-sub">Битва</div>
                 </div>
                 <div class="card" onclick="showScreen('wheel')">
                     <div class="card-icon">🎡</div>
-                    <div class="card-title">WHEEL</div>
-                    <div class="card-sub">Spin & win</div>
+                    <div class="card-title" data-i18n="wheel">КОЛЕСО</div>
+                    <div class="card-sub">Крути и выигрывай</div>
                 </div>
                 <div class="card" onclick="showScreen('profile')">
                     <div class="card-icon">👤</div>
-                    <div class="card-title">PROFILE</div>
-                    <div class="card-sub">Your stats</div>
+                    <div class="card-title" data-i18n="profile">ПРОФИЛЬ</div>
+                    <div class="card-sub">Ваша статистика</div>
                 </div>
                 <div class="card" onclick="showScreen('achievements')">
                     <div class="card-icon">🏅</div>
-                    <div class="card-title">ACHIEVEMENTS</div>
-                    <div class="card-sub">Rewards</div>
+                    <div class="card-title" data-i18n="achievements">ДОСТИЖЕНИЯ</div>
+                    <div class="card-sub">Награды</div>
                 </div>
             </div>
+            <!-- ПРОМОКОДЫ -->
+            <div style="margin-top:12px;">
+                <div class="card" onclick="showScreen('promo')" style="border-color:#1a5276;">
+                    <div class="card-icon">🎫</div>
+                    <div class="card-title" data-i18n="promo">ПРОМОКОД</div>
+                    <div class="card-sub">Введите код для бонуса</div>
+                </div>
+            </div>
+            <!-- АДМИНКА -->
             <div id="adminPanel" style="margin-top:12px;display:none;">
-                <div class="card" onclick="showScreen('admin')" style="border-color:#1a5276;">
+                <div class="card" onclick="showScreen('admin')" style="border-color:#c0392b;">
                     <div class="card-icon">👑</div>
-                    <div class="card-title">ADMIN PANEL</div>
-                    <div class="card-sub">Manage everything</div>
+                    <div class="card-title" data-i18n="admin">АДМИН ПАНЕЛЬ</div>
+                    <div class="card-sub">Управление всем</div>
                 </div>
             </div>
         </div>
 
-        <!-- Экран кейсов -->
+        <!-- ============ ЭКРАН КЕЙСОВ ============ -->
         <div id="cases-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="casesCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
-            <div class="page-title">SELECT CASE</div>
+            <div class="page-title" data-i18n="select_case">ВЫБЕРИ КЕЙС</div>
             <div id="casesList"></div>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Экран инвентаря -->
+        <!-- ============ ЭКРАН ИНВЕНТАРЯ ============ -->
         <div id="inventory-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="invCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
-            <div class="page-title">INVENTORY</div>
+            <div class="page-title" data-i18n="inventory">ИНВЕНТАРЬ</div>
             <div id="inventoryList" class="scrollable"></div>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Экран профиля -->
+        <!-- ============ ЭКРАН ПРОФИЛЯ ============ -->
         <div id="profile-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="profileCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div id="profileContent"></div>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Экран колеса -->
+        <!-- ============ ЭКРАН КОЛЕСА ============ -->
         <div id="wheel-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="wheelCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
-            <div class="page-title">WHEEL</div>
-            <div id="wheelStatus" class="wheel-status">Spins left: loading...</div>
-            <button class="case-btn primary" onclick="spinWheel()" id="spinBtn">SPIN</button>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <div class="page-title" data-i18n="wheel">КОЛЕСО</div>
+            <div id="wheelStatus" class="wheel-status">Прокруток сегодня: загрузка...</div>
+            <button class="case-btn primary" onclick="spinWheel()" id="spinBtn" data-i18n="spin">КРУТНУТЬ</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Экран PVP -->
+        <!-- ============ ЭКРАН PVP ============ -->
         <div id="pvp-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="pvpCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
-            <div class="page-title">PVP BATTLE</div>
+            <div class="page-title" data-i18n="pvp">ПВП БИТВА</div>
             <div class="pvp-case-select">
-                <span>Case:</span>
+                <span>Кейс:</span>
                 <button class="case-btn" id="pvpCaseBtn" onclick="cyclePvpCase()">BOMJ (500)</button>
             </div>
-            <button class="case-btn primary" onclick="findPvpOpponent()" id="pvpSearchBtn">FIND OPPONENT</button>
+            <button class="case-btn primary" onclick="findPvpOpponent()" id="pvpSearchBtn" data-i18n="find_opponent">НАЙТИ СОПЕРНИКА</button>
             <div id="pvpStatus" class="pvp-status"></div>
             <div id="pvpResult" class="pvp-result"></div>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Экран достижений -->
+        <!-- ============ ЭКРАН ДОСТИЖЕНИЙ ============ -->
         <div id="achievements-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="achCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
-            <div class="page-title">ACHIEVEMENTS</div>
+            <div class="page-title" data-i18n="achievements">ДОСТИЖЕНИЯ</div>
             <div id="achievementsList" class="scrollable"></div>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Админ-панель -->
+        <!-- ============ АДМИН-ПАНЕЛЬ ============ -->
         <div id="admin-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="{{ url_for('static', filename='images/coins.png') }}" alt="coins">
+                    <img src="/images/coins.png" alt="coins">
                     <span id="adminCoins">0</span>
                 </div>
                 <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
-            <div class="page-title">ADMIN PANEL</div>
+            <div class="page-title" data-i18n="admin">АДМИН ПАНЕЛЬ</div>
             <div id="adminContent" class="scrollable"></div>
-            <button class="case-btn" onclick="showScreen('main')">BACK</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
         </div>
 
-        <!-- Модальное окно -->
+        <!-- ============ МОДАЛЬНОЕ ОКНО ============ -->
         <div class="modal" id="modal">
             <div class="modal-content">
                 <button class="modal-close" onclick="closeModal()">✕</button>
@@ -175,6 +184,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
