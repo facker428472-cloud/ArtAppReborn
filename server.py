@@ -216,7 +216,7 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
+            password TEXT DEFAULT '',
             coins INTEGER DEFAULT 500,
             total_deposit INTEGER DEFAULT 0,
             wheel_spins INTEGER DEFAULT 1,
@@ -250,10 +250,11 @@ def init_db():
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('berkut', 1500, 50000, 1.5)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('champion', 5000, 250000, 2.0)")
         
+        # Создаём тестового админа (на всякий случай)
         c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1")
         if c.fetchone()[0] == 0:
             c.execute("INSERT INTO users (id, username, password, coins, is_admin, created_at, last_wheel_date) VALUES (?,?,?,?,?,?,?)",
-                      (1, "admin", "250734382", 1000000, 1, datetime.now().isoformat(), "2000-01-01"))
+                      (1, "admin", "admin123", 1000000, 1, datetime.now().isoformat(), "2000-01-01"))
 
 # ============ СТАТИЧЕСКИЕ ФАЙЛЫ ============
 @app.route('/static/images/<path:filename>')
@@ -275,6 +276,8 @@ def index():
     return render_template('index.html')
 
 # ============ API ЭНДПОИНТЫ ============
+
+# ============ ЛОГИН ============
 @app.route('/api/miniapp_login', methods=['POST'])
 def miniapp_login():
     try:
@@ -282,14 +285,24 @@ def miniapp_login():
         user_id = data.get('user_id')
         username = data.get('username')
         
-        # Проверка: если юзернейм = ArtCSbotSupp → даём админку
-        is_admin = (username == "ArtCSbotSupp")
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            user = c.execute("SELECT id, username, is_admin FROM users WHERE id=?", (user_id,)).fetchone()
+            
+            # Считаем сколько всего пользователей
+            total_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            
+            # Первые 2 пользователя получают админку
+            is_admin = (total_users < 2)
+            
+            # Проверяем есть ли пользователь
+            c.execute("SELECT id, username, is_admin FROM users WHERE id=?", (user_id,))
+            user = c.fetchone()
             
             if user:
+                # Если пользователь уже админ — оставляем
+                if user[2] == 1:
+                    is_admin = True
+                
                 if user[2] != is_admin:
                     c.execute("UPDATE users SET is_admin=?, username=?, last_activity=? WHERE id=?", 
                              (is_admin, username, datetime.now().isoformat(), user_id))
@@ -304,13 +317,15 @@ def miniapp_login():
                     "is_admin": is_admin or user[2]
                 })
             else:
+                # Создаём нового пользователя
                 c.execute("""
-                    INSERT INTO users (id, username, is_admin, coins, level, exp, created_at, last_wheel_date, last_activity) 
-                    VALUES (?,?,?,?,?,?,?,?,?)
+                    INSERT INTO users (id, username, password, is_admin, coins, level, exp, created_at, last_wheel_date, last_activity) 
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
                 """, (
                     user_id, 
                     username, 
-                    is_admin, 
+                    "telegram_" + str(user_id),
+                    is_admin,
                     500,
                     1,
                     0,
@@ -328,6 +343,7 @@ def miniapp_login():
         print(f"Login error: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ============ ПРОФИЛЬ ============
 @app.route('/api/miniapp_profile', methods=['GET'])
 def miniapp_profile():
     try:
@@ -339,7 +355,7 @@ def miniapp_profile():
         
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins FROM users WHERE id=?", (user_id,))
+            c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins, is_admin FROM users WHERE id=?", (user_id,))
             user = c.fetchone()
             
             if user:
@@ -354,27 +370,45 @@ def miniapp_profile():
                     "wins": user[5] or 0,
                     "losses": user[6] or 0,
                     "wheel_spins": user[7] or 0,
-                    "referrals": referrals
+                    "referrals": referrals,
+                    "is_admin": user[8] or 0
                 })
             else:
-                c.execute("INSERT INTO users (id, username, coins, level, created_at, last_wheel_date) VALUES (?,?,?,?,?,?)",
-                         (user_id, "player", 500, 1, datetime.now().isoformat(), "2000-01-01"))
+                # Если пользователя нет — создаём
+                total_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+                is_admin = (total_users < 2)
+                
+                c.execute("""
+                    INSERT INTO users (id, username, password, is_admin, coins, level, created_at, last_wheel_date) 
+                    VALUES (?,?,?,?,?,?,?,?)
+                """, (
+                    user_id, 
+                    "player_" + str(user_id),
+                    "telegram_" + str(user_id),
+                    is_admin,
+                    500, 
+                    1, 
+                    datetime.now().isoformat(), 
+                    "2000-01-01"
+                ))
                 conn.commit()
                 return jsonify({
                     "id": user_id,
-                    "username": "player",
+                    "username": "player_" + str(user_id),
                     "coins": 500,
                     "level": 1,
                     "exp": 0,
                     "wins": 0,
                     "losses": 0,
                     "wheel_spins": 1,
-                    "referrals": 0
+                    "referrals": 0,
+                    "is_admin": is_admin
                 })
     except Exception as e:
         print(f"Profile error: {e}")
         return jsonify({"error": str(e)}), 500
 
+# ============ ИНВЕНТАРЬ ============
 @app.route('/api/miniapp_inventory', methods=['GET'])
 def miniapp_inventory():
     try:
@@ -387,6 +421,7 @@ def miniapp_inventory():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ ОТКРЫТИЕ КЕЙСА ============
 @app.route('/api/miniapp_open_case', methods=['POST'])
 def miniapp_open_case():
     try:
@@ -411,6 +446,7 @@ def miniapp_open_case():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ ПРОДАЖА ============
 @app.route('/api/miniapp_sell_item', methods=['POST'])
 def miniapp_sell_item():
     try:
@@ -431,6 +467,7 @@ def miniapp_sell_item():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ ПРОДАЖА ВСЕГО ============
 @app.route('/api/miniapp_sell_all', methods=['POST'])
 def miniapp_sell_all():
     try:
@@ -449,6 +486,7 @@ def miniapp_sell_all():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ КОЛЕСО ============
 @app.route('/api/miniapp_wheel', methods=['POST'])
 def miniapp_wheel():
     try:
@@ -489,12 +527,14 @@ def miniapp_wheel():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ АЧИВКИ ============
 @app.route('/api/miniapp_achievements', methods=['GET'])
 def miniapp_achievements():
     try:
         user_id = request.args.get('user_id')
         with db_pool.get_connection() as conn:
             c = conn.cursor()
+            # Простая заглушка для ачивок
             achievements = [
                 {"id": 1, "name": "First Case", "reward": 100, "done": True},
                 {"id": 2, "name": "10 Cases", "reward": 500, "done": False},
@@ -506,6 +546,7 @@ def miniapp_achievements():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============ PVP ============
 @app.route('/api/miniapp_pvp_find', methods=['POST'])
 def miniapp_pvp_find():
     try:
