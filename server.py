@@ -19,7 +19,6 @@ CORS(app)
 DB = "artdrop.db"
 DB_TIMEOUT = 60
 
-# ============ ПУЛ КОННЕКШЕНОВ ============
 class DatabasePool:
     def __init__(self, max_connections=15):
         self._connections = queue.Queue(maxsize=max_connections)
@@ -48,8 +47,7 @@ class DatabasePool:
 
 db_pool = DatabasePool(max_connections=20)
 
-# ============ СКИНЫ (ЦЕНЫ 1 В 1 КАК В БОТЕ) ============
-# ============ КЕЙС БОМЖ (500) ============
+# ============ СКИНЫ ============
 BOMJ_SKINS_CHEAP = [
     ("P90 | Sand Spray (BS)", 180), ("MP9 | Sand Dashed (FT)", 177),
     ("SCAR-20 | Zinc (BS)", 167), ("SG 553 | Night Camo (BS)", 162),
@@ -86,7 +84,6 @@ BOMJ_SKINS_EXPENSIVE = [
     ("P250 | Re.built (BS)", 1242), ("Galil AR | Cold Fusion (FT)", 1997)
 ]
 
-# ============ КЕЙС БЕРКУТ (1500) ============
 BERKUT_SKINS_COMMON = [
     ("MP7 | Army Recon (FT)", 670), ("Tec-9 | Urban DDPAT (FT)", 670),
     ("G3SG1 | Polar Camo (FT)", 612), ("G3SG1 | Red Jasper (FN)", 535),
@@ -129,7 +126,6 @@ BERKUT_SKINS_MYTHIC = [
     ("MAC-10 | Lapis Gator", 16180), ("MP7 | Cirrus", 15652)
 ]
 
-# ============ КЕЙС ЧЕМПИОН (5000) ============
 CHAMPION_SKINS_COMMON = [
     ("SCAR-20 | Contractor (FT)", 435), ("Galil AR | VariCamo (FT)", 1125),
     ("XM1014 | Irezumi (BS)", 1250), ("G3SG1 | Green Apple (FT)", 1572),
@@ -171,7 +167,6 @@ CHAMPION_SKINS_MYTHIC = [
     ("Desert Eagle | Light Rail (BS)", 21095), ("SSG 08 | Ghost Crusader (WW)", 23417)
 ]
 
-# ============ НОВЫЙ КЕЙС DRAFT (7000) ============
 DRAFT_SKINS = [
     ("STAT TRAK AK-47 | Elite Build (FT)", 37205),
     ("STAT TRAK PP-Bizon | Cobalt Halftone (FT)", 30745),
@@ -274,7 +269,6 @@ def add_exp(user_id, amount):
 def init_db():
     with db_pool.get_connection() as conn:
         c = conn.cursor()
-        
         c.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -299,7 +293,6 @@ def init_db():
             daily_reward_day INTEGER DEFAULT 0,
             daily_reward_last TEXT
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -309,7 +302,6 @@ def init_db():
             withdraw_status TEXT DEFAULT 'none',
             withdraw_expires TEXT
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS cases (
             name TEXT PRIMARY KEY,
             price INTEGER,
@@ -317,7 +309,6 @@ def init_db():
             jackpot_chance REAL,
             is_active INTEGER DEFAULT 1
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS promocodes (
             code TEXT PRIMARY KEY,
             reward INTEGER,
@@ -327,7 +318,6 @@ def init_db():
             created_at TEXT,
             is_active INTEGER DEFAULT 1
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS promo_usage (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -336,7 +326,6 @@ def init_db():
             reward INTEGER,
             used_at TEXT
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS withdraw_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -349,7 +338,6 @@ def init_db():
             created_at TEXT,
             expires_at TEXT
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS deposit_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -357,23 +345,19 @@ def init_db():
             discount_used INTEGER,
             created_at TEXT
         )''')
-        
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
         )''')
-        
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('bomj', 500, 5000, 1.0)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('berkut', 1500, 50000, 1.5)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('champion', 5000, 250000, 2.0)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('draft', 7000, 50000, 2.0)")
-        
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('coin_rate', '217')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pvp_enabled', '1')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('withdraw_enabled', '1')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('wheel_enabled', '1')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('achievements_enabled', '1')")
-        
         c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1")
         if c.fetchone()[0] == 0:
             c.execute("INSERT INTO users (id, username, password, coins, is_admin, created_at, last_wheel_date) VALUES (?,?,?,?,?,?,?)",
@@ -399,102 +383,76 @@ def index():
 
 # ============ API ЭНДПОИНТЫ ============
 
-# === ЛОГИН ===
 @app.route('/api/miniapp_login', methods=['POST'])
 def miniapp_login():
     try:
         data = request.get_json()
         user_id = data.get('user_id')
         username = data.get('username')
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             total_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             is_admin = (total_users < 2)
-            
             c.execute("SELECT id, username, is_admin, coins FROM users WHERE id=?", (user_id,))
             user = c.fetchone()
-            
             if user:
                 if user[2] == 1:
                     is_admin = True
                 if user[2] != is_admin:
-                    c.execute("UPDATE users SET is_admin=?, username=?, last_activity=? WHERE id=?", 
-                             (is_admin, username, datetime.now().isoformat(), user_id))
+                    c.execute("UPDATE users SET is_admin=?, username=?, last_activity=? WHERE id=?", (is_admin, username, datetime.now().isoformat(), user_id))
                 else:
-                    c.execute("UPDATE users SET last_activity=?, username=? WHERE id=?", 
-                             (datetime.now().isoformat(), username, user_id))
-                
-                # Проверка на минусовой баланс
+                    c.execute("UPDATE users SET last_activity=?, username=? WHERE id=?", (datetime.now().isoformat(), username, user_id))
                 if user[3] < 0:
                     c.execute("UPDATE users SET is_frozen=1 WHERE id=?", (user_id,))
-                
                 return jsonify({"success": True, "user_id": user_id, "username": username, "is_admin": is_admin or user[2]})
             else:
-                c.execute("""INSERT INTO users (id, username, password, is_admin, coins, level, exp, created_at, last_wheel_date, last_activity) 
-                          VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                          (user_id, username, "telegram_" + str(user_id), is_admin, 500, 1, 0, 
-                           datetime.now().isoformat(), "2000-01-01", datetime.now().isoformat()))
+                c.execute("INSERT INTO users (id, username, password, is_admin, coins, level, exp, created_at, last_wheel_date, last_activity) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                          (user_id, username, "telegram_" + str(user_id), is_admin, 500, 1, 0, datetime.now().isoformat(), "2000-01-01", datetime.now().isoformat()))
                 return jsonify({"success": True, "user_id": user_id, "username": username, "is_admin": is_admin})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ЕЖЕДНЕВНАЯ НАГРАДА ===
 @app.route('/api/daily_reward', methods=['POST'])
 def daily_reward():
     try:
         data = request.get_json()
         user_id = data.get('user_id')
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT daily_reward_day, daily_reward_last, coins FROM users WHERE id=?", (user_id,)).fetchone()
             if not user:
                 return jsonify({"error": "User not found"}), 404
-            
             today = date.today().isoformat()
             day, last_date, coins = user[0], user[1], user[2]
-            
-            # Если награда не бралась сегодня
             if last_date != today:
-                # Проверяем, не пропущен ли день
                 if last_date:
                     last = datetime.strptime(last_date, "%Y-%m-%d").date()
                     diff = (date.today() - last).days
                     if diff > 1:
-                        day = 0  # Сброс до 1 дня
-                
+                        day = 0
                 day += 1
                 if day > 7:
                     day = 1
-                
-                # Награды по дням
                 rewards = {1: 500, 2: 750, 3: 1000, 4: 1250, 5: 1500, 6: 2500, 7: 3000}
                 reward = rewards.get(day, 500)
-                
-                c.execute("UPDATE users SET coins=coins+?, daily_reward_day=?, daily_reward_last=? WHERE id=?", 
-                         (reward, day, today, user_id))
+                c.execute("UPDATE users SET coins=coins+?, daily_reward_day=?, daily_reward_last=? WHERE id=?", (reward, day, today, user_id))
                 conn.commit()
-                
                 return jsonify({"success": True, "day": day, "reward": reward, "coins": coins + reward})
             else:
                 return jsonify({"error": "Already claimed today"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ПРОФИЛЬ ===
 @app.route('/api/miniapp_profile', methods=['GET'])
 def miniapp_profile():
     try:
         user_id = request.args.get('user_id')
         if not user_id:
             return jsonify({"error": "No user_id"}), 400
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins, is_admin, total_deposit, is_frozen, daily_reward_day, daily_reward_last FROM users WHERE id=?", (user_id,))
             user = c.fetchone()
-            
             if user:
                 referrals = c.execute("SELECT COUNT(*) FROM users WHERE referred_by=?", (user_id,)).fetchone()[0]
                 return jsonify({
@@ -510,10 +468,8 @@ def miniapp_profile():
             else:
                 total_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
                 is_admin = (total_users < 2)
-                c.execute("""INSERT INTO users (id, username, password, is_admin, coins, level, created_at, last_wheel_date) 
-                          VALUES (?,?,?,?,?,?,?,?)""",
-                          (user_id, "player_" + str(user_id), "telegram_" + str(user_id), is_admin, 500, 1, 
-                           datetime.now().isoformat(), "2000-01-01"))
+                c.execute("INSERT INTO users (id, username, password, is_admin, coins, level, created_at, last_wheel_date) VALUES (?,?,?,?,?,?,?,?)",
+                          (user_id, "player_" + str(user_id), "telegram_" + str(user_id), is_admin, 500, 1, datetime.now().isoformat(), "2000-01-01"))
                 conn.commit()
                 return jsonify({"id": user_id, "username": "player_" + str(user_id), "coins": 500, "level": 1, 
                               "exp": 0, "wins": 0, "losses": 0, "wheel_spins": 1, "referrals": 0, 
@@ -522,7 +478,6 @@ def miniapp_profile():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ИНВЕНТАРЬ ===
 @app.route('/api/miniapp_inventory', methods=['GET'])
 def miniapp_inventory():
     try:
@@ -535,7 +490,6 @@ def miniapp_inventory():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ОТКРЫТИЕ КЕЙСА ===
 @app.route('/api/miniapp_open_case', methods=['POST'])
 def miniapp_open_case():
     try:
@@ -543,7 +497,6 @@ def miniapp_open_case():
         user_id = data.get('user_id')
         case_name = data.get('case_name')
         price = get_case_price(case_name)
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
@@ -553,95 +506,76 @@ def miniapp_open_case():
                 return jsonify({"error": "Account frozen"}), 400
             if user[0] < price:
                 return jsonify({"error": f"Need {price} coins"}), 400
-            
             c.execute("UPDATE users SET coins=coins-? WHERE id=?", (price, user_id))
             item_name, item_price = open_case_by_name(case_name)
-            c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)",
-                     (user_id, item_name, item_price, datetime.now().isoformat()))
-        
+            c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)", (user_id, item_name, item_price, datetime.now().isoformat()))
         add_exp(user_id, 5)
         return jsonify({"success": True, "item": item_name, "price": item_price})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ПРОДАЖА ===
 @app.route('/api/miniapp_sell_item', methods=['POST'])
 def miniapp_sell_item():
     try:
         data = request.get_json()
         user_id = data.get('user_id')
         item_id = data.get('item_id')
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
             if user and user[0] == 1:
                 return jsonify({"error": "Account frozen"}), 400
-            
             item = c.execute("SELECT item_price, withdraw_status FROM inventory WHERE id=? AND user_id=?", (item_id, user_id)).fetchone()
             if not item:
                 return jsonify({"error": "Item not found"}), 404
             if item[1] == 'pending':
                 return jsonify({"error": "Item is pending withdraw"}), 400
-            
             c.execute("DELETE FROM inventory WHERE id=? AND user_id=?", (item_id, user_id))
             c.execute("UPDATE users SET coins=coins+? WHERE id=?", (item[0], user_id))
-        
         add_exp(user_id, 10)
         return jsonify({"success": True, "price": item[0]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ПРОДАЖА ВСЕГО ===
 @app.route('/api/miniapp_sell_all', methods=['POST'])
 def miniapp_sell_all():
     try:
         data = request.get_json()
         user_id = data.get('user_id')
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
             if user and user[0] == 1:
                 return jsonify({"error": "Account frozen"}), 400
-            
             items = c.execute("SELECT item_price FROM inventory WHERE user_id=? AND withdraw_status='none'", (user_id,)).fetchall()
             total = sum(i[0] for i in items)
             c.execute("DELETE FROM inventory WHERE user_id=? AND withdraw_status='none'", (user_id,))
             c.execute("UPDATE users SET coins=coins+? WHERE id=?", (total, user_id))
-        
         add_exp(user_id, len(items) * 10)
         return jsonify({"success": True, "total": total, "count": len(items)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === КОЛЕСО ===
 @app.route('/api/miniapp_wheel', methods=['POST'])
 def miniapp_wheel():
     try:
         data = request.get_json()
         user_id = data.get('user_id')
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
             if user and user[0] == 1:
                 return jsonify({"error": "Account frozen"}), 400
-            
             today = date.today().isoformat()
             last_date, spins = c.execute("SELECT last_wheel_date, wheel_spins FROM users WHERE id=?", (user_id,)).fetchone()
-            
             if last_date != today:
                 c.execute("UPDATE users SET wheel_spins=wheel_spins+1, last_wheel_date=? WHERE id=?", (today, user_id))
                 spins += 1
-            
             if spins <= 0:
                 return jsonify({"error": "No spins left"}), 400
-            
             c.execute("UPDATE users SET wheel_spins=wheel_spins-1 WHERE id=?", (user_id,))
             prize_name, prize_value, prize_type = random.choice(WHEEL_PRIZES)
             result = {}
-            
             if prize_type == "coins":
                 c.execute("UPDATE users SET coins=coins+? WHERE id=?", (prize_value, user_id))
                 result = {"name": prize_name, "coins": prize_value}
@@ -651,52 +585,84 @@ def miniapp_wheel():
                 result = {"name": prize_name, "discount": prize_value}
             else:
                 item_name, item_price = open_case_by_name(prize_type)
-                c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)",
-                         (user_id, item_name, item_price, datetime.now().isoformat()))
+                c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)", (user_id, item_name, item_price, datetime.now().isoformat()))
                 result = {"name": prize_name, "case": prize_type, "item": item_name, "price": item_price}
                 add_exp(user_id, 5)
-            
             return jsonify({"success": True, "result": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === ПРОМОКОДЫ ===
 @app.route('/api/promo_activate', methods=['POST'])
 def promo_activate():
     try:
         data = request.get_json()
         user_id = data.get('user_id')
         code = data.get('code').upper()
-        
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             user = c.execute("SELECT is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
             if user and user[0] == 1:
                 return jsonify({"error": "Account frozen"}), 400
-            
             promo = c.execute("SELECT reward, uses_left, target_user, is_active FROM promocodes WHERE code=?", (code,)).fetchone()
-            
             if not promo or promo[3] == 0:
                 return jsonify({"error": "Неверный промокод"}), 400
             if promo[1] <= 0:
                 return jsonify({"error": "Промокод использован"}), 400
             if promo[2] != 0 and promo[2] != user_id:
                 return jsonify({"error": "Это не ваш промокод"}), 400
-            
             used = c.execute("SELECT COUNT(*) FROM promo_usage WHERE user_id=? AND code=?", (user_id, code)).fetchone()[0]
             if used > 0:
                 return jsonify({"error": "Вы уже использовали этот промокод"}), 400
-            
             c.execute("UPDATE users SET coins=coins+? WHERE id=?", (promo[0], user_id))
             c.execute("UPDATE promocodes SET uses_left=uses_left-1 WHERE code=?", (code,))
-            c.execute("INSERT INTO promo_usage (user_id, username, code, reward, used_at) VALUES (?,?,?,?,?)",
-                     (user_id, "", code, promo[0], datetime.now().isoformat()))
-            
+            c.execute("INSERT INTO promo_usage (user_id, username, code, reward, used_at) VALUES (?,?,?,?,?)", (user_id, "", code, promo[0], datetime.now().isoformat()))
             return jsonify({"success": True, "reward": promo[0]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ============ ВСЕ АДМИН-ФУНКЦИИ ============
+@app.route('/api/withdraw_request', methods=['POST'])
+def withdraw_request():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        item_id = data.get('item_id')
+        trade_link = data.get('trade_link')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            user = c.execute("SELECT username, total_deposit FROM users WHERE id=?", (user_id,)).fetchone()
+            if not user or user[1] < 115:
+                return jsonify({"error": "Минимальный депозит 115 RUB для вывода"}), 400
+            item = c.execute("SELECT item_name, item_price FROM inventory WHERE id=? AND user_id=?", (item_id, user_id)).fetchone()
+            if not item:
+                return jsonify({"error": "Предмет не найден"}), 404
+            existing = c.execute("SELECT id FROM withdraw_requests WHERE item_id=? AND status='pending'", (item_id,)).fetchone()
+            if existing:
+                return jsonify({"error": "Заявка на этот предмет уже отправлена"}), 400
+            c.execute("UPDATE inventory SET withdraw_status='pending' WHERE id=? AND user_id=?", (item_id, user_id))
+            expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
+            c.execute("INSERT INTO withdraw_requests (user_id, username, item_id, item_name, item_price, trade_link, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?)",
+                      (user_id, user[0], item_id, item[0], item[1], trade_link, datetime.now().isoformat(), expires_at))
+            return jsonify({"success": True, "expires_at": expires_at, "message": "Заявка создана! У вас 24 часа для подтверждения."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/withdraw_check', methods=['GET'])
+def withdraw_check():
+    try:
+        user_id = request.args.get('user_id')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            now = datetime.now().isoformat()
+            expired = c.execute("SELECT id, item_id FROM withdraw_requests WHERE user_id=? AND status='pending' AND expires_at < ?", (user_id, now)).fetchall()
+            for req in expired:
+                c.execute("UPDATE withdraw_requests SET status='expired' WHERE id=?", (req[0],))
+                c.execute("UPDATE inventory SET withdraw_status='none' WHERE id=?", (req[1],))
+            active = c.execute("SELECT id, item_name, item_price, created_at, expires_at FROM withdraw_requests WHERE user_id=? AND status='pending'", (user_id,)).fetchall()
+            return jsonify({"active": [{"id": r[0], "item_name": r[1], "item_price": r[2], "created_at": r[3], "expires_at": r[4]} for r in active]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        # ============ АДМИН-ФУНКЦИИ ============
+
 @app.route('/api/admin/users', methods=['GET'])
 def admin_users():
     with db_pool.get_connection() as conn:
@@ -768,8 +734,7 @@ def admin_simulate_deposit():
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             c.execute("UPDATE users SET coins=coins+?, total_deposit=total_deposit+? WHERE id=?", (coins, rub_amount, user_id))
-            c.execute("INSERT INTO deposit_history (user_id, amount, discount_used, created_at) VALUES (?,?,?,?)",
-                     (user_id, rub_amount, discount, datetime.now().isoformat()))
+            c.execute("INSERT INTO deposit_history (user_id, amount, discount_used, created_at) VALUES (?,?,?,?)", (user_id, rub_amount, discount, datetime.now().isoformat()))
             c.execute("UPDATE users SET active_discount=0 WHERE id=?", (user_id,))
         return jsonify({"success": True, "coins": coins})
     except Exception as e:
@@ -796,13 +761,12 @@ def admin_give_item():
         item_price = data.get('item_price')
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)",
-                     (user_id, item_name, item_price, datetime.now().isoformat()))
+            c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)", (user_id, item_name, item_price, datetime.now().isoformat()))
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/admin/remove_item', methods(['POST'])
+@app.route('/api/admin/remove_item', methods=['POST'])
 def admin_remove_item():
     try:
         data = request.get_json()
@@ -835,8 +799,7 @@ def admin_give_case():
         item_name, item_price = open_case_by_name(case_name)
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)",
-                     (user_id, item_name, item_price, datetime.now().isoformat()))
+            c.execute("INSERT INTO inventory (user_id, item_name, item_price, opened_at) VALUES (?,?,?,?)", (user_id, item_name, item_price, datetime.now().isoformat()))
         return jsonify({"success": True, "item": item_name, "price": item_price})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
