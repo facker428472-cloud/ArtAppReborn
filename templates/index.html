@@ -6,6 +6,161 @@
     <title>ArtDrop CS2</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* ДОПОЛНИТЕЛЬНЫЕ СТИЛИ ДЛЯ НЕОНОВО-СИНЕГО ДИЗАЙНА */
+        body {
+            background: #0a0a0f;
+            color: #ffffff;
+        }
+        .header {
+            border-bottom: 1px solid rgba(0, 212, 255, 0.15);
+        }
+        .balance {
+            color: #00d4ff;
+        }
+        .balance img {
+            filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.3));
+        }
+        .profile-btn {
+            border-color: #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.15);
+        }
+        .profile-btn:active {
+            transform: scale(0.92);
+            box-shadow: 0 0 40px rgba(0, 212, 255, 0.3);
+        }
+        .welcome-text {
+            color: #00d4ff;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
+        }
+        .card {
+            background: rgba(15, 15, 25, 0.85);
+            border-color: rgba(0, 212, 255, 0.12);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        .card:active {
+            transform: scale(0.95);
+            border-color: #00d4ff;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
+        }
+        .card-title {
+            color: #e0e0e0;
+        }
+        .card-sub {
+            color: rgba(255,255,255,0.4);
+        }
+        .case-btn {
+            border-color: rgba(0, 212, 255, 0.2);
+            background: rgba(15, 15, 25, 0.6);
+            color: #e0e0e0;
+        }
+        .case-btn:active {
+            transform: scale(0.97);
+            border-color: #00d4ff;
+        }
+        .case-btn.primary {
+            background: #00d4ff;
+            color: #0a0a0f;
+            border-color: #00d4ff;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+        }
+        .case-btn.primary:active {
+            background: #00b8e6;
+        }
+        .inventory-item {
+            background: rgba(15, 15, 25, 0.6);
+            border-color: rgba(0, 212, 255, 0.08);
+        }
+        .inventory-item .name {
+            color: #e0e0e0;
+        }
+        .inventory-item .price {
+            color: #00d4ff;
+        }
+        .btn-sell {
+            background: #00d4ff;
+            color: #0a0a0f;
+        }
+        .btn-sell:active {
+            background: #00b8e6;
+        }
+        .btn-withdraw {
+            color: #00d4ff;
+            border-color: #00d4ff;
+        }
+        .btn-withdraw:active {
+            background: rgba(0, 212, 255, 0.1);
+        }
+        .profile-field {
+            background: rgba(15, 15, 25, 0.6);
+            border-color: rgba(0, 212, 255, 0.08);
+        }
+        .profile-field .label {
+            color: rgba(255,255,255,0.4);
+        }
+        .profile-field .value {
+            color: #e0e0e0;
+        }
+        .modal-content {
+            background: #0f0f19;
+            border: 1px solid rgba(0, 212, 255, 0.15);
+        }
+        .modal-title {
+            color: #00d4ff;
+        }
+        .modal-close {
+            color: rgba(255,255,255,0.4);
+        }
+        .modal-close:hover {
+            color: #00d4ff;
+        }
+        .page-title {
+            color: #00d4ff;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.1);
+        }
+        .wheel-status {
+            color: rgba(255,255,255,0.4);
+        }
+        .pvp-case-select span {
+            color: rgba(255,255,255,0.4);
+        }
+        .pvp-status {
+            color: rgba(255,255,255,0.4);
+        }
+        .pvp-result {
+            color: #00d4ff;
+        }
+        .loading {
+            color: rgba(255,255,255,0.4);
+        }
+        .scrollable::-webkit-scrollbar-thumb {
+            background: #00d4ff;
+        }
+        .frozen-warning {
+            background: rgba(255, 0, 0, 0.15);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 8px 12px;
+            color: #ff4444;
+            font-weight: 700;
+            text-align: center;
+            margin: 8px 0;
+            display: none;
+            font-size: 14px;
+        }
+        .daily-btn {
+            background: rgba(0, 212, 255, 0.08);
+            border-color: rgba(0, 212, 255, 0.2);
+        }
+        .daily-btn:active {
+            background: rgba(0, 212, 255, 0.15);
+        }
+        .daily-btn.claimed {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
 </head>
 <body>
     <div id="app">
@@ -13,14 +168,21 @@
         <div id="main-screen" class="screen active">
             <div class="header">
                 <div class="balance" id="balanceDisplay">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="coinsValue">0</span>
                 </div>
                 <div class="profile-btn" onclick="showScreen('profile')">
-                    <img src="/images/profile.png" alt="profile">
+                    <span style="font-size:28px;">👤</span>
                 </div>
             </div>
+            
+            <!-- ПРЕДУПРЕЖДЕНИЕ О ЗАМОРОЗКЕ -->
+            <div id="frozenWarning" class="frozen-warning">
+                ❄️ АККАУНТ ЗАМОРОЖЕН — отрицательный баланс!
+            </div>
+            
             <div class="welcome-text" data-i18n="welcome">ДОБРО ПОЖАЛОВАТЬ</div>
+            
             <div class="grid">
                 <div class="card" onclick="showScreen('cases')">
                     <div class="card-icon">🎁</div>
@@ -53,17 +215,28 @@
                     <div class="card-sub">Награды</div>
                 </div>
             </div>
+            
+            <!-- ЕЖЕДНЕВНАЯ НАГРАДА -->
+            <div style="margin-top:10px;">
+                <div class="card daily-btn" onclick="claimDailyReward()" id="dailyRewardBtn" style="border-color:rgba(0,212,255,0.2);">
+                    <div class="card-icon">🎁</div>
+                    <div class="card-title" data-i18n="daily">ЕЖЕДНЕВНАЯ НАГРАДА</div>
+                    <div class="card-sub">Заберите бонус</div>
+                </div>
+            </div>
+            
             <!-- ПРОМОКОДЫ -->
-            <div style="margin-top:12px;">
-                <div class="card" onclick="showScreen('promo')" style="border-color:#1a5276;">
+            <div style="margin-top:10px;">
+                <div class="card" onclick="showScreen('promo')" style="border-color:rgba(0,212,255,0.2);">
                     <div class="card-icon">🎫</div>
                     <div class="card-title" data-i18n="promo">ПРОМОКОД</div>
                     <div class="card-sub">Введите код для бонуса</div>
                 </div>
             </div>
+            
             <!-- АДМИНКА -->
-            <div id="adminPanel" style="margin-top:12px;display:none;">
-                <div class="card" onclick="showScreen('admin')" style="border-color:#c0392b;">
+            <div id="adminPanel" style="margin-top:10px;display:none;">
+                <div class="card" onclick="showScreen('admin')" style="border-color:rgba(0,212,255,0.3);">
                     <div class="card-icon">👑</div>
                     <div class="card-title" data-i18n="admin">АДМИН ПАНЕЛЬ</div>
                     <div class="card-sub">Управление всем</div>
@@ -75,110 +248,110 @@
         <div id="cases-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="casesCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
             <div class="page-title" data-i18n="select_case">ВЫБЕРИ КЕЙС</div>
-            <div id="casesList"></div>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <div id="casesList" style="padding:10px;"></div>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ ЭКРАН ИНВЕНТАРЯ ============ -->
         <div id="inventory-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="invCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
             <div class="page-title" data-i18n="inventory">ИНВЕНТАРЬ</div>
-            <div id="inventoryList" class="scrollable"></div>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <div id="inventoryList" class="scrollable" style="padding:10px;"></div>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ ЭКРАН ПРОФИЛЯ ============ -->
         <div id="profile-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="profileCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
-            <div id="profileContent"></div>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <div id="profileContent" style="padding:10px;"></div>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ ЭКРАН КОЛЕСА ============ -->
         <div id="wheel-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="wheelCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
             <div class="page-title" data-i18n="wheel">КОЛЕСО</div>
-            <div id="wheelStatus" class="wheel-status">Прокруток сегодня: загрузка...</div>
-            <button class="case-btn primary" onclick="spinWheel()" id="spinBtn" data-i18n="spin">КРУТНУТЬ</button>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <div id="wheelStatus" class="wheel-status" style="text-align:center;padding:15px;">🎡 Прокруток сегодня: загрузка...</div>
+            <button class="case-btn primary" onclick="spinWheel()" id="spinBtn" data-i18n="spin" style="margin:10px;">🎡 КРУТНУТЬ</button>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ ЭКРАН PVP ============ -->
         <div id="pvp-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="pvpCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
             <div class="page-title" data-i18n="pvp">ПВП БИТВА</div>
-            <div class="pvp-case-select">
-                <span>Кейс:</span>
-                <button class="case-btn" id="pvpCaseBtn" onclick="cyclePvpCase()">BOMJ (500)</button>
+            <div class="pvp-case-select" style="display:flex;align-items:center;padding:10px;gap:10px;">
+                <span style="color:rgba(255,255,255,0.4);">Кейс:</span>
+                <button class="case-btn" id="pvpCaseBtn" onclick="cyclePvpCase()" style="flex:1;margin:0;">🥫 BOMJ (500)</button>
             </div>
-            <button class="case-btn primary" onclick="findPvpOpponent()" id="pvpSearchBtn" data-i18n="find_opponent">НАЙТИ СОПЕРНИКА</button>
-            <div id="pvpStatus" class="pvp-status"></div>
-            <div id="pvpResult" class="pvp-result"></div>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <button class="case-btn primary" onclick="findPvpOpponent()" id="pvpSearchBtn" data-i18n="find_opponent" style="margin:10px;">🔍 НАЙТИ СОПЕРНИКА</button>
+            <div id="pvpStatus" class="pvp-status" style="text-align:center;padding:10px;"></div>
+            <div id="pvpResult" class="pvp-result" style="text-align:center;padding:10px;font-weight:700;"></div>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ ЭКРАН ДОСТИЖЕНИЙ ============ -->
         <div id="achievements-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="achCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
             <div class="page-title" data-i18n="achievements">ДОСТИЖЕНИЯ</div>
-            <div id="achievementsList" class="scrollable"></div>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <div id="achievementsList" class="scrollable" style="padding:10px;"></div>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ АДМИН-ПАНЕЛЬ ============ -->
         <div id="admin-screen" class="screen">
             <div class="header">
                 <div class="balance">
-                    <img src="/images/coins.png" alt="coins">
+                    <span style="font-size:24px;">🪙</span>
                     <span id="adminCoins">0</span>
                 </div>
-                <button class="modal-close" onclick="showScreen('main')">✕</button>
+                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
             </div>
             <div class="page-title" data-i18n="admin">АДМИН ПАНЕЛЬ</div>
-            <div id="adminContent" class="scrollable"></div>
-            <button class="case-btn" onclick="showScreen('main')" data-i18n="back">НАЗАД</button>
+            <div id="adminContent" class="scrollable" style="padding:10px;"></div>
+            <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ МОДАЛЬНОЕ ОКНО ============ -->
         <div class="modal" id="modal">
             <div class="modal-content">
-                <button class="modal-close" onclick="closeModal()">✕</button>
+                <button class="modal-close" onclick="closeModal()" style="font-size:24px;background:none;border:none;float:right;color:rgba(255,255,255,0.4);">✕</button>
                 <div id="modalBody"></div>
             </div>
         </div>
