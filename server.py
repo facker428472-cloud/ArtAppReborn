@@ -12,6 +12,7 @@ import os
 import threading
 import io
 import csv
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -19,6 +20,7 @@ CORS(app)
 DB = "artdrop.db"
 DB_TIMEOUT = 60
 
+# ============ ПУЛ КОННЕКШЕНОВ ============
 class DatabasePool:
     def __init__(self, max_connections=15):
         self._connections = queue.Queue(maxsize=max_connections)
@@ -269,6 +271,7 @@ def add_exp(user_id, amount):
 def init_db():
     with db_pool.get_connection() as conn:
         c = conn.cursor()
+        
         c.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -291,8 +294,11 @@ def init_db():
             created_at TEXT,
             last_activity TEXT,
             daily_reward_day INTEGER DEFAULT 0,
-            daily_reward_last TEXT
+            daily_reward_last TEXT,
+            subscribed_reward INTEGER DEFAULT 0,
+            refund_requested INTEGER DEFAULT 0
         )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -302,6 +308,7 @@ def init_db():
             withdraw_status TEXT DEFAULT 'none',
             withdraw_expires TEXT
         )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS cases (
             name TEXT PRIMARY KEY,
             price INTEGER,
@@ -309,6 +316,7 @@ def init_db():
             jackpot_chance REAL,
             is_active INTEGER DEFAULT 1
         )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS promocodes (
             code TEXT PRIMARY KEY,
             reward INTEGER,
@@ -318,6 +326,7 @@ def init_db():
             created_at TEXT,
             is_active INTEGER DEFAULT 1
         )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS promo_usage (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -326,6 +335,7 @@ def init_db():
             reward INTEGER,
             used_at TEXT
         )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS withdraw_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -338,6 +348,7 @@ def init_db():
             created_at TEXT,
             expires_at TEXT
         )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS deposit_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -345,19 +356,31 @@ def init_db():
             discount_used INTEGER,
             created_at TEXT
         )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS refund_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            amount INTEGER,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT
+        )''')
+        
         c.execute('''CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
         )''')
+        
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('bomj', 500, 5000, 1.0)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('berkut', 1500, 50000, 1.5)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('champion', 5000, 250000, 2.0)")
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('draft', 7000, 50000, 2.0)")
+        
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('coin_rate', '217')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pvp_enabled', '1')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('withdraw_enabled', '1')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('wheel_enabled', '1')")
         c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('achievements_enabled', '1')")
+        
         c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1")
         if c.fetchone()[0] == 0:
             c.execute("INSERT INTO users (id, username, password, coins, is_admin, created_at, last_wheel_date) VALUES (?,?,?,?,?,?,?)",
@@ -451,7 +474,7 @@ def miniapp_profile():
             return jsonify({"error": "No user_id"}), 400
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins, is_admin, total_deposit, is_frozen, daily_reward_day, daily_reward_last FROM users WHERE id=?", (user_id,))
+            c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins, is_admin, total_deposit, is_frozen, daily_reward_day, daily_reward_last, subscribed_reward FROM users WHERE id=?", (user_id,))
             user = c.fetchone()
             if user:
                 referrals = c.execute("SELECT COUNT(*) FROM users WHERE referred_by=?", (user_id,)).fetchone()[0]
@@ -463,7 +486,8 @@ def miniapp_profile():
                     "is_admin": user[8] or 0, "total_deposit": user[9] or 0,
                     "is_frozen": user[10] or 0,
                     "daily_reward_day": user[11] or 0,
-                    "daily_reward_last": user[12]
+                    "daily_reward_last": user[12],
+                    "subscribed_reward": user[13] or 0
                 })
             else:
                 total_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
@@ -474,7 +498,7 @@ def miniapp_profile():
                 return jsonify({"id": user_id, "username": "player_" + str(user_id), "coins": 500, "level": 1, 
                               "exp": 0, "wins": 0, "losses": 0, "wheel_spins": 1, "referrals": 0, 
                               "is_admin": is_admin, "total_deposit": 0, "is_frozen": 0,
-                              "daily_reward_day": 0, "daily_reward_last": None})
+                              "daily_reward_day": 0, "daily_reward_last": None, "subscribed_reward": 0})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -629,9 +653,11 @@ def withdraw_request():
         trade_link = data.get('trade_link')
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            user = c.execute("SELECT username, total_deposit FROM users WHERE id=?", (user_id,)).fetchone()
-            if not user or user[1] < 115:
-                return jsonify({"error": "Минимальный депозит 115 RUB для вывода"}), 400
+            user = c.execute("SELECT username, coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+            if user[2] == 1:
+                return jsonify({"error": "Account frozen"}), 400
             item = c.execute("SELECT item_name, item_price FROM inventory WHERE id=? AND user_id=?", (item_id, user_id)).fetchone()
             if not item:
                 return jsonify({"error": "Предмет не найден"}), 404
@@ -661,24 +687,75 @@ def withdraw_check():
             return jsonify({"active": [{"id": r[0], "item_name": r[1], "item_price": r[2], "created_at": r[3], "expires_at": r[4]} for r in active]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-        # ============ АДМИН-ФУНКЦИИ ============
+
+@app.route('/api/check_subscription', methods=['POST'])
+def check_subscription():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        CHANNEL_ID = "@ARTCSSKINS"
+        BOT_TOKEN = "8990265498:AAHwke0u_4MroSTSiY_Krc-8nUS-XAP__K0"
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember"
+        params = {"chat_id": CHANNEL_ID, "user_id": user_id}
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        if data.get("ok"):
+            status = data["result"].get("status")
+            if status in ["member", "creator", "administrator"]:
+                with db_pool.get_connection() as conn:
+                    c = conn.cursor()
+                    rewarded = c.execute("SELECT subscribed_reward FROM users WHERE id=?", (user_id,)).fetchone()
+                    if rewarded and rewarded[0] == 1:
+                        return jsonify({"subscribed": True, "already_rewarded": True, "message": "Ты уже получил награду за подписку!"})
+                    else:
+                        c.execute("UPDATE users SET coins=coins+3000, subscribed_reward=1 WHERE id=?", (user_id,))
+                        conn.commit()
+                        return jsonify({"subscribed": True, "already_rewarded": False, "reward": 3000, "message": "✅ Подписка подтверждена! +3000 монет"})
+            else:
+                return jsonify({"subscribed": False, "message": "❌ Ты не подписан на канал! Подпишись и нажми 'Проверить'"})
+        else:
+            return jsonify({"error": "Ошибка проверки подписки"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/refund_request', methods=['POST'])
+def refund_request():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            user = c.execute("SELECT coins, total_deposit FROM users WHERE id=?", (user_id,)).fetchone()
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+            coins = user[0]
+            deposit = user[1]
+            if coins < deposit * 217:
+                return jsonify({"error": "Монеты были потрачены, возврат невозможен"}), 400
+            c.execute("INSERT INTO refund_requests (user_id, amount, created_at) VALUES (?,?,?)", (user_id, deposit, datetime.now().isoformat()))
+            c.execute("UPDATE users SET refund_requested=1 WHERE id=?", (user_id,))
+            return jsonify({"success": True, "message": "Заявка на возврат отправлена. Ожидайте до 7 рабочих дней."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ============ ВСЕ АДМИН-ФУНКЦИИ (65+) ============
 
 @app.route('/api/admin/users', methods=['GET'])
 def admin_users():
     with db_pool.get_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT id, username, coins, level, is_frozen FROM users ORDER BY id DESC LIMIT 100")
+        c.execute("SELECT id, username, coins, level, is_frozen, is_banned FROM users ORDER BY id DESC LIMIT 100")
         users = c.fetchall()
-        return jsonify({"users": [{"id": u[0], "username": u[1], "coins": u[2], "level": u[3], "is_frozen": u[4]} for u in users]})
+        return jsonify({"users": [{"id": u[0], "username": u[1], "coins": u[2], "level": u[3], "is_frozen": u[4], "is_banned": u[5]} for u in users]})
 
 @app.route('/api/admin/get_user_by_id/<int:user_id>', methods=['GET'])
 def admin_get_user_by_id(user_id):
     with db_pool.get_connection() as conn:
         c = conn.cursor()
-        c.execute("SELECT id, username, coins, level FROM users WHERE id=?", (user_id,))
+        c.execute("SELECT id, username, coins, level, is_frozen, is_banned FROM users WHERE id=?", (user_id,))
         user = c.fetchone()
         if user:
-            return jsonify({"id": user[0], "username": user[1], "coins": user[2], "level": user[3]})
+            return jsonify({"id": user[0], "username": user[1], "coins": user[2], "level": user[3], "is_frozen": user[4], "is_banned": user[5]})
         return jsonify({"error": "User not found"}), 404
 
 @app.route('/api/admin/give_coins', methods=['POST'])
@@ -702,6 +779,9 @@ def admin_remove_coins():
         amount = data.get('amount')
         with db_pool.get_connection() as conn:
             c = conn.cursor()
+            user = c.execute("SELECT coins FROM users WHERE id=?", (user_id,)).fetchone()
+            if user[0] < amount:
+                return jsonify({"error": "Недостаточно монет"}), 400
             c.execute("UPDATE users SET coins=coins-? WHERE id=?", (amount, user_id))
         return jsonify({"success": True})
     except Exception as e:
@@ -715,6 +795,9 @@ def admin_remove_deposit():
         amount = data.get('amount')
         with db_pool.get_connection() as conn:
             c = conn.cursor()
+            user = c.execute("SELECT total_deposit FROM users WHERE id=?", (user_id,)).fetchone()
+            if user[0] < amount:
+                return jsonify({"error": "Недостаточно депозита"}), 400
             c.execute("UPDATE users SET total_deposit=total_deposit-? WHERE id=?", (amount, user_id))
         return jsonify({"success": True})
     except Exception as e:
@@ -1144,6 +1227,30 @@ def admin_toggle_achievements():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/admin/toggle_quiz', methods=['POST'])
+def admin_toggle_quiz():
+    try:
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            current = c.execute("SELECT value FROM settings WHERE key='quiz_enabled'").fetchone()
+            new = "0" if current[0] == "1" else "1"
+            c.execute("UPDATE settings SET value=? WHERE key='quiz_enabled'", (new,))
+        return jsonify({"success": True, "enabled": new == "1"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/toggle_referrals', methods=['POST'])
+def admin_toggle_referrals():
+    try:
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            current = c.execute("SELECT value FROM settings WHERE key='referrals_enabled'").fetchone()
+            new = "0" if current[0] == "1" else "1"
+            c.execute("UPDATE settings SET value=? WHERE key='referrals_enabled'", (new,))
+        return jsonify({"success": True, "enabled": new == "1"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/admin/active_users', methods=['GET'])
 def admin_active_users():
     try:
@@ -1237,6 +1344,135 @@ def admin_stats():
             "total_items": total_items,
             "total_deposit": total_deposit
         })
+
+@app.route('/api/admin/top_coins', methods=['GET'])
+def admin_top_coins():
+    with db_pool.get_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, username, coins FROM users ORDER BY coins DESC LIMIT 10")
+        users = c.fetchall()
+        return jsonify({"users": [{"id": u[0], "username": u[1], "coins": u[2]} for u in users]})
+
+@app.route('/api/admin/top_level', methods=['GET'])
+def admin_top_level():
+    with db_pool.get_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, username, level FROM users ORDER BY level DESC LIMIT 10")
+        users = c.fetchall()
+        return jsonify({"users": [{"id": u[0], "username": u[1], "level": u[2]} for u in users]})
+
+@app.route('/api/admin/find_user', methods=['GET'])
+def admin_find_user():
+    try:
+        username = request.args.get('username')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("SELECT id, username, coins, level FROM users WHERE username LIKE ?", (f'%{username}%',))
+            users = c.fetchall()
+            return jsonify({"users": [{"id": u[0], "username": u[1], "coins": u[2], "level": u[3]} for u in users]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/delete_user', methods=['POST'])
+def admin_delete_user():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM inventory WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM deposit_history WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM promo_usage WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM withdraw_requests WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM refund_requests WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM users WHERE id=?", (user_id,))
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/add_skin_to_case', methods=['POST'])
+def admin_add_skin_to_case():
+    try:
+        data = request.get_json()
+        case_name = data.get('case_name')
+        skin_name = data.get('skin_name')
+        skin_price = data.get('skin_price')
+        # TODO: добавить логику добавления скина в кейс
+        return jsonify({"success": True, "message": "Feature coming soon"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/remove_skin_from_case', methods=['POST'])
+def admin_remove_skin_from_case():
+    try:
+        data = request.get_json()
+        case_name = data.get('case_name')
+        skin_name = data.get('skin_name')
+        # TODO: добавить логику удаления скина из кейса
+        return jsonify({"success": True, "message": "Feature coming soon"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ============ ДОСТИЖЕНИЯ ============
+@app.route('/api/achievements', methods=['GET'])
+def achievements():
+    try:
+        user_id = request.args.get('user_id')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            achievements = [
+                {"id": 1, "name": "First Case", "reward": 100, "done": True},
+                {"id": 2, "name": "10 Cases", "reward": 500, "done": False},
+                {"id": 3, "name": "50 Cases", "reward": 2000, "done": False},
+                {"id": 4, "name": "100 Cases", "reward": 5000, "done": False},
+                {"id": 5, "name": "First Win", "reward": 200, "done": True},
+            ]
+            return jsonify({"achievements": achievements})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ============ PVP ============
+@app.route('/api/pvp_find', methods=['POST'])
+def pvp_find():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        case_name = data.get('case_name')
+        price = get_case_price(case_name)
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            coins = c.execute("SELECT coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
+            if not coins or coins[0] < price:
+                return jsonify({"error": f"Need {price} coins"}), 400
+            if coins[1] == 1:
+                return jsonify({"error": "Account frozen"}), 400
+        battle_id = random.randint(100000, 999999)
+        return jsonify({"waiting": True, "battle_id": battle_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/pvp_start', methods=['POST'])
+def pvp_start():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        case_name = data.get('case_name')
+        price = get_case_price(case_name)
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE users SET coins=coins-? WHERE id=?", (price, user_id))
+        item_name, item_price = open_case_by_name(case_name)
+        return jsonify({"skin": item_name, "price": item_price})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/pvp_status', methods=['GET'])
+def pvp_status():
+    try:
+        battle_id = request.args.get('battle_id')
+        return jsonify({"status": "active", "winner_id": None})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ============ ЗАПУСК ============
 if __name__ == '__main__':
