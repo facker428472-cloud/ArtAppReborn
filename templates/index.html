@@ -6,409 +6,6 @@
     <title>ArtDrop CS2</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        /* ДОПОЛНИТЕЛЬНЫЕ СТИЛИ ДЛЯ НЕОНОВО-СИНЕГО ДИЗАЙНА */
-        body {
-            background: #0a0a0f;
-            color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 16px 16px 16px;
-            border-bottom: 1px solid rgba(0, 212, 255, 0.15);
-        }
-        .balance {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 22px;
-            font-weight: 700;
-            color: #00d4ff;
-        }
-        .balance img {
-            filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.3));
-        }
-        .profile-btn {
-            width: 52px;
-            height: 52px;
-            border-radius: 50%;
-            border: 2px solid #00d4ff;
-            overflow: hidden;
-            cursor: pointer;
-            background: rgba(0, 212, 255, 0.05);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 20px rgba(0, 212, 255, 0.15);
-            transition: all 0.3s ease;
-        }
-        .profile-btn:active {
-            transform: scale(0.92);
-            box-shadow: 0 0 40px rgba(0, 212, 255, 0.3);
-        }
-        .profile-btn span {
-            font-size: 28px;
-            line-height: 1;
-        }
-        .welcome-text {
-            font-size: 28px;
-            font-weight: 700;
-            color: #00d4ff;
-            text-align: center;
-            padding: 16px 0 8px 0;
-            text-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 12px;
-            padding: 0 12px;
-        }
-        .card {
-            background: rgba(15, 15, 25, 0.85);
-            border-radius: 16px;
-            padding: 18px 12px;
-            text-align: center;
-            border: 1px solid rgba(0, 212, 255, 0.12);
-            backdrop-filter: blur(10px);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-        .card:active {
-            transform: scale(0.95);
-            border-color: #00d4ff;
-            box-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
-        }
-        .card-icon {
-            font-size: 32px;
-            display: block;
-            margin-bottom: 4px;
-        }
-        .card-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #e0e0e0;
-        }
-        .card-sub {
-            font-size: 11px;
-            color: rgba(255,255,255,0.4);
-        }
-        .case-btn {
-            display: block;
-            width: 100%;
-            padding: 16px;
-            margin: 8px 0;
-            border: 2px solid rgba(0, 212, 255, 0.2);
-            border-radius: 12px;
-            background: rgba(15, 15, 25, 0.6);
-            font-size: 16px;
-            font-weight: 600;
-            color: #e0e0e0;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
-        }
-        .case-btn:active {
-            transform: scale(0.97);
-            border-color: #00d4ff;
-        }
-        .case-btn.primary {
-            background: #00d4ff;
-            color: #0a0a0f;
-            border-color: #00d4ff;
-            box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
-        }
-        .case-btn.primary:active {
-            background: #00b8e6;
-        }
-        .frozen-warning {
-            background: rgba(255, 0, 0, 0.15);
-            border: 1px solid rgba(255, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 8px 12px;
-            color: #ff4444;
-            font-weight: 700;
-            text-align: center;
-            margin: 8px 12px;
-            display: none;
-            font-size: 14px;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.7);
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-            backdrop-filter: blur(8px);
-        }
-        .modal.active {
-            display: flex;
-        }
-        .modal-content {
-            background: #0f0f19;
-            border-radius: 24px;
-            padding: 24px;
-            max-width: 400px;
-            width: 100%;
-            max-height: 85vh;
-            overflow-y: auto;
-            border: 1px solid rgba(0, 212, 255, 0.15);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
-        .modal-title {
-            font-size: 22px;
-            font-weight: 700;
-            color: #00d4ff;
-            text-align: center;
-            margin-bottom: 12px;
-        }
-        .modal-close {
-            font-size: 24px;
-            cursor: pointer;
-            color: rgba(255,255,255,0.4);
-            background: none;
-            border: none;
-            float: right;
-            padding: 0 8px;
-        }
-        .modal-close:hover {
-            color: #00d4ff;
-        }
-        .scrollable {
-            max-height: 60vh;
-            overflow-y: auto;
-            padding: 0 4px;
-        }
-        .scrollable::-webkit-scrollbar {
-            width: 4px;
-        }
-        .scrollable::-webkit-scrollbar-thumb {
-            background: #00d4ff;
-            border-radius: 4px;
-        }
-        .scrollable::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .page-title {
-            text-align: center;
-            font-size: 24px;
-            font-weight: 700;
-            color: #00d4ff;
-            padding: 8px 0 16px 0;
-            text-shadow: 0 0 30px rgba(0, 212, 255, 0.1);
-        }
-        .inventory-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 16px;
-            background: rgba(15, 15, 25, 0.6);
-            border-radius: 12px;
-            margin-bottom: 8px;
-            border: 1px solid rgba(0, 212, 255, 0.08);
-        }
-        .inventory-item .name {
-            font-weight: 500;
-            color: #e0e0e0;
-            flex: 1;
-        }
-        .inventory-item .price {
-            color: #00d4ff;
-            font-weight: 600;
-            margin: 0 12px;
-        }
-        .inventory-item .actions {
-            display: flex;
-            gap: 8px;
-        }
-        .inventory-item .actions button {
-            padding: 6px 14px;
-            border-radius: 8px;
-            border: none;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-sell {
-            background: #00d4ff;
-            color: #0a0a0f;
-        }
-        .btn-sell:active {
-            background: #00b8e6;
-        }
-        .btn-withdraw {
-            background: transparent;
-            color: #00d4ff;
-            border: 1px solid #00d4ff;
-        }
-        .btn-withdraw:active {
-            background: rgba(0, 212, 255, 0.1);
-        }
-        .profile-field {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 16px;
-            background: rgba(15, 15, 25, 0.6);
-            border-radius: 12px;
-            margin-bottom: 6px;
-            border: 1px solid rgba(0, 212, 255, 0.08);
-        }
-        .profile-field .label {
-            color: rgba(255,255,255,0.4);
-        }
-        .profile-field .value {
-            color: #e0e0e0;
-            font-weight: 500;
-        }
-        .wheel-status {
-            text-align: center;
-            padding: 20px;
-            font-size: 18px;
-            color: rgba(255,255,255,0.4);
-        }
-        .pvp-case-select {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            padding: 8px 12px;
-        }
-        .pvp-case-select span {
-            color: rgba(255,255,255,0.4);
-            font-weight: 500;
-        }
-        .pvp-case-select .case-btn {
-            flex: 1;
-            padding: 12px;
-            margin: 0;
-        }
-        .pvp-status {
-            text-align: center;
-            padding: 12px;
-            color: rgba(255,255,255,0.4);
-        }
-        .pvp-result {
-            text-align: center;
-            padding: 12px;
-            color: #00d4ff;
-            font-weight: 600;
-            font-size: 18px;
-        }
-        .loading {
-            text-align: center;
-            padding: 30px;
-            color: rgba(255,255,255,0.4);
-        }
-        .screen {
-            display: none;
-        }
-        .screen.active {
-            display: block;
-        }
-        
-        /* ============ ЭКРАН СОГЛАШЕНИЯ ============ */
-        #terms-screen {
-            display: none;
-            flex-direction: column;
-            padding: 20px;
-            height: 100vh;
-            background: #0a0a0f;
-            overflow-y: auto;
-            color: #fff;
-        }
-        #terms-screen.active {
-            display: flex;
-        }
-        .terms-content {
-            background: rgba(255,255,255,0.03);
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(0,212,255,0.1);
-            flex: 1;
-            overflow-y: auto;
-            font-size: 13px;
-            color: #c0c0c0;
-            line-height: 1.8;
-            margin-bottom: 15px;
-        }
-        .terms-content .section-title {
-            font-weight: 700;
-            color: #00d4ff;
-            font-size: 16px;
-            margin: 15px 0 10px 0;
-        }
-        .terms-content .section-title:first-child {
-            margin-top: 0;
-        }
-        .terms-content .text {
-            margin-bottom: 12px;
-        }
-        .terms-content .text-indent {
-            margin-left: 15px;
-            margin-bottom: 8px;
-        }
-        .terms-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 0;
-        }
-        .terms-checkbox input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            accent-color: #00d4ff;
-            cursor: pointer;
-        }
-        .terms-checkbox label {
-            color: #c0c0c0;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .terms-btn {
-            margin-top: 5px;
-        }
-        
-        /* КАРТОЧКА ПОДПИСКИ */
-        .subscribe-card {
-            border-color: rgba(255,215,0,0.3) !important;
-            background: rgba(255,215,0,0.05) !important;
-        }
-        .subscribe-card .card-title {
-            color: #ffd700 !important;
-        }
-        
-        /* АДАПТАЦИЯ */
-        @media (max-width: 380px) {
-            .balance { font-size: 18px; }
-            .profile-btn { width: 44px; height: 44px; }
-            .profile-btn span { font-size: 22px; }
-            .card { padding: 14px 8px; }
-            .card-icon { font-size: 26px; }
-            .card-title { font-size: 12px; }
-            .welcome-text { font-size: 22px; }
-        }
-        @media (min-width: 600px) {
-            .grid { gap: 14px; }
-            .card { padding: 24px 16px; }
-            .card-icon { font-size: 40px; }
-            .card-title { font-size: 16px; }
-        }
-    </style>
 </head>
 <body>
     <div id="app">
@@ -418,21 +15,21 @@
                 <div style="font-size:32px;font-weight:700;color:#00d4ff;">ArtDrop</div>
                 <div style="font-size:14px;color:#6a7a8e;">Пользовательское соглашение</div>
             </div>
-            
-            <div class="terms-content" id="termsContent">
-                <!-- Текст соглашения загружается из JS -->
-            </div>
-            
+            <div class="terms-content" id="termsContent"></div>
             <div class="terms-checkbox">
-                <input type="checkbox" id="termsCheckbox">
+                <input type="checkbox" id="termsCheckbox" onchange="toggleTermsButton()">
                 <label for="termsCheckbox">Я принимаю условия Пользовательского соглашения</label>
             </div>
-            
-            <button class="case-btn primary terms-btn" onclick="acceptTerms()">✅ ПРОДОЛЖИТЬ</button>
+            <div id="termsTimer" style="text-align:center;color:#6a7a8e;font-size:14px;padding:8px 0;">
+                ⏳ Подождите <span id="termsCountdown">10</span> секунд
+            </div>
+            <button class="case-btn primary terms-btn" id="termsButton" onclick="acceptTerms()" disabled>
+                ⏳ ПОДОЖДИТЕ 10 СЕКУНД
+            </button>
         </div>
 
         <!-- ============ ГЛАВНЫЙ ЭКРАН ============ -->
-        <div id="main-screen" class="screen active">
+        <div id="main-screen" class="screen" style="display:none;">
             <div class="header">
                 <div class="balance" id="balanceDisplay">
                     <span style="font-size:24px;">🪙</span>
@@ -442,14 +39,8 @@
                     <span>👤</span>
                 </div>
             </div>
-            
-            <!-- ПРЕДУПРЕЖДЕНИЕ О ЗАМОРОЗКЕ -->
-            <div id="frozenWarning" class="frozen-warning">
-                ❄️ АККАУНТ ЗАМОРОЖЕН — отрицательный баланс!
-            </div>
-            
+            <div id="frozenWarning" class="frozen-warning">❄️ АККАУНТ ЗАМОРОЖЕН — отрицательный баланс!</div>
             <div class="welcome-text" data-i18n="welcome">ДОБРО ПОЖАЛОВАТЬ</div>
-            
             <div class="grid">
                 <div class="card" onclick="showScreen('cases')">
                     <div class="card-icon">🎁</div>
@@ -482,8 +73,6 @@
                     <div class="card-sub">Награды</div>
                 </div>
             </div>
-            
-            <!-- ЕЖЕДНЕВНАЯ НАГРАДА -->
             <div style="margin-top:10px;padding:0 12px;">
                 <div class="card daily-btn" onclick="claimDailyReward()" id="dailyRewardBtn" style="border-color:rgba(0,212,255,0.2);">
                     <div class="card-icon">🎁</div>
@@ -491,8 +80,6 @@
                     <div class="card-sub">Заберите бонус</div>
                 </div>
             </div>
-            
-            <!-- ПОДПИСКА НА КАНАЛ -->
             <div style="margin-top:10px;padding:0 12px;">
                 <div class="card subscribe-card" onclick="checkSubscription()">
                     <div class="card-icon">📺</div>
@@ -500,8 +87,6 @@
                     <div class="card-sub">+3000 🪙 за подписку</div>
                 </div>
             </div>
-            
-            <!-- ПРОМОКОДЫ -->
             <div style="margin-top:10px;padding:0 12px;">
                 <div class="card" onclick="showScreen('promo')" style="border-color:rgba(0,212,255,0.2);">
                     <div class="card-icon">🎫</div>
@@ -509,8 +94,6 @@
                     <div class="card-sub">Введите код для бонуса</div>
                 </div>
             </div>
-            
-            <!-- АДМИНКА -->
             <div id="adminPanel" style="margin-top:10px;padding:0 12px;display:none;">
                 <div class="card" onclick="showScreen('admin')" style="border-color:rgba(0,212,255,0.3);">
                     <div class="card-icon">👑</div>
@@ -518,18 +101,14 @@
                     <div class="card-sub">Управление всем</div>
                 </div>
             </div>
-            
             <div style="height:20px;"></div>
         </div>
 
         <!-- ============ ЭКРАН КЕЙСОВ ============ -->
-        <div id="cases-screen" class="screen">
+        <div id="cases-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="casesCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="casesCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div class="page-title" data-i18n="select_case">ВЫБЕРИ КЕЙС</div>
             <div id="casesList" style="padding:10px;"></div>
@@ -537,13 +116,10 @@
         </div>
 
         <!-- ============ ЭКРАН ИНВЕНТАРЯ ============ -->
-        <div id="inventory-screen" class="screen">
+        <div id="inventory-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="invCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="invCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div class="page-title" data-i18n="inventory">ИНВЕНТАРЬ</div>
             <div id="inventoryList" class="scrollable" style="padding:10px;"></div>
@@ -551,26 +127,20 @@
         </div>
 
         <!-- ============ ЭКРАН ПРОФИЛЯ ============ -->
-        <div id="profile-screen" class="screen">
+        <div id="profile-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="profileCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="profileCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div id="profileContent" style="padding:10px;"></div>
             <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
         <!-- ============ ЭКРАН КОЛЕСА ============ -->
-        <div id="wheel-screen" class="screen">
+        <div id="wheel-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="wheelCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="wheelCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div class="page-title" data-i18n="wheel">КОЛЕСО</div>
             <div id="wheelStatus" class="wheel-status" style="text-align:center;padding:15px;">🎡 Прокруток сегодня: загрузка...</div>
@@ -579,13 +149,10 @@
         </div>
 
         <!-- ============ ЭКРАН PVP ============ -->
-        <div id="pvp-screen" class="screen">
+        <div id="pvp-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="pvpCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="pvpCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div class="page-title" data-i18n="pvp">ПВП БИТВА</div>
             <div class="pvp-case-select">
@@ -599,13 +166,10 @@
         </div>
 
         <!-- ============ ЭКРАН ДОСТИЖЕНИЙ ============ -->
-        <div id="achievements-screen" class="screen">
+        <div id="achievements-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="achCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="achCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div class="page-title" data-i18n="achievements">ДОСТИЖЕНИЯ</div>
             <div id="achievementsList" class="scrollable" style="padding:10px;"></div>
@@ -613,13 +177,10 @@
         </div>
 
         <!-- ============ АДМИН-ПАНЕЛЬ ============ -->
-        <div id="admin-screen" class="screen">
+        <div id="admin-screen" class="screen" style="display:none;">
             <div class="header">
-                <div class="balance">
-                    <span style="font-size:24px;">🪙</span>
-                    <span id="adminCoins">0</span>
-                </div>
-                <button class="modal-close" onclick="showScreen('main')" style="font-size:24px;background:none;border:none;color:rgba(255,255,255,0.4);">✕</button>
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="adminCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
             </div>
             <div class="page-title" data-i18n="admin">АДМИН ПАНЕЛЬ</div>
             <div id="adminContent" class="scrollable" style="padding:10px;"></div>
@@ -629,7 +190,7 @@
         <!-- ============ МОДАЛЬНОЕ ОКНО ============ -->
         <div class="modal" id="modal">
             <div class="modal-content">
-                <button class="modal-close" onclick="closeModal()" style="font-size:24px;background:none;border:none;float:right;color:rgba(255,255,255,0.4);">✕</button>
+                <button class="modal-close" onclick="closeModal()">✕</button>
                 <div id="modalBody"></div>
             </div>
         </div>
