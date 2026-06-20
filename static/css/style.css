@@ -11,6 +11,8 @@ body {
     color: #ffffff;
     min-height: 100vh;
     overflow-x: hidden;
+    padding: 0;
+    margin: 0;
 }
 
 /* ============ ЭКРАН СОГЛАШЕНИЯ ============ */
@@ -19,7 +21,7 @@ body {
     flex-direction: column;
     padding: 20px;
     height: 100vh;
-    background: #0a0a0f;
+    background: radial-gradient(ellipse at center, #0f1a2a 0%, #0a0a0f 100%);
     overflow-y: auto;
     color: #fff;
 }
@@ -56,11 +58,6 @@ body {
     margin-bottom: 12px;
 }
 
-.terms-content .text-indent {
-    margin-left: 15px;
-    margin-bottom: 8px;
-}
-
 .terms-checkbox {
     display: flex;
     align-items: center;
@@ -69,10 +66,32 @@ body {
 }
 
 .terms-checkbox input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    accent-color: #00d4ff;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
     cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.terms-checkbox input[type="checkbox"]:checked {
+    background: #00d4ff;
+    border-color: #00d4ff;
+}
+
+.terms-checkbox input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #0a0a0f;
+    font-weight: 700;
+    font-size: 16px;
 }
 
 .terms-checkbox label {
@@ -103,6 +122,21 @@ body {
     color: #00d4ff;
 }
 
+.balance span {
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.balance.pulse span {
+    animation: balancePulse 0.4s ease;
+}
+
+@keyframes balancePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); color: #ffd700; }
+}
+
+/* ============ АВАТАРКА ============ */
 .profile-btn {
     width: 52px;
     height: 52px;
@@ -116,6 +150,21 @@ body {
     justify-content: center;
     box-shadow: 0 0 20px rgba(0, 212, 255, 0.15);
     transition: all 0.3s ease;
+    position: relative;
+}
+
+.profile-btn img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.profile-btn .avatar-placeholder {
+    font-size: 28px;
+    line-height: 1;
+    color: #00d4ff;
+    font-weight: 700;
 }
 
 .profile-btn:active {
@@ -123,9 +172,22 @@ body {
     box-shadow: 0 0 40px rgba(0, 212, 255, 0.3);
 }
 
-.profile-btn span {
-    font-size: 28px;
-    line-height: 1;
+.profile-btn .online-status {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #0a0a0f;
+    background: #444;
+    display: none;
+}
+
+.profile-btn .online-status.online {
+    display: block;
+    background: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
 }
 
 /* ============ ГЛАВНЫЙ ЭКРАН ============ */
@@ -156,6 +218,29 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+    animation: cardAppear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.card:nth-child(1) { animation-delay: 0.05s; }
+.card:nth-child(2) { animation-delay: 0.10s; }
+.card:nth-child(3) { animation-delay: 0.15s; }
+.card:nth-child(4) { animation-delay: 0.20s; }
+.card:nth-child(5) { animation-delay: 0.25s; }
+.card:nth-child(6) { animation-delay: 0.30s; }
+.card:nth-child(7) { animation-delay: 0.35s; }
+.card:nth-child(8) { animation-delay: 0.40s; }
+
+@keyframes cardAppear {
+    0% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .card:active {
@@ -213,6 +298,11 @@ body {
     border-color: #00d4ff;
 }
 
+.case-btn:hover {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.05);
+}
+
 .case-btn.primary {
     background: #00d4ff;
     color: #0a0a0f;
@@ -222,6 +312,16 @@ body {
 
 .case-btn.primary:active {
     background: #00b8e6;
+}
+
+.case-btn.primary:hover {
+    background: #00b8e6;
+    box-shadow: 0 0 40px rgba(0, 212, 255, 0.3);
+}
+
+.case-btn:disabled {
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 /* ============ ПРЕДУПРЕЖДЕНИЕ ============ */
@@ -252,10 +352,13 @@ body {
     z-index: 1000;
     padding: 20px;
     backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .modal.active {
     display: flex;
+    opacity: 1;
 }
 
 .modal-content {
@@ -268,6 +371,12 @@ body {
     overflow-y: auto;
     border: 1px solid rgba(0, 212, 255, 0.15);
     box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal.active .modal-content {
+    transform: scale(1) translateY(0);
 }
 
 .modal-title {
@@ -312,6 +421,23 @@ body {
     background: transparent;
 }
 
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 212, 255, 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #00d4ff;
+}
+
 /* ============ СТРАНИЦЫ ============ */
 .page-title {
     text-align: center;
@@ -324,10 +450,15 @@ body {
 
 .screen {
     display: none;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
 .screen.active {
     display: block;
+    opacity: 1;
+    transform: translateY(0);
 }
 
 /* ============ ИНВЕНТАРЬ ============ */
@@ -340,6 +471,31 @@ body {
     border-radius: 12px;
     margin-bottom: 8px;
     border: 1px solid rgba(0, 212, 255, 0.08);
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: itemSlide 0.3s ease forwards;
+}
+
+.inventory-item:nth-child(1) { animation-delay: 0.02s; }
+.inventory-item:nth-child(2) { animation-delay: 0.04s; }
+.inventory-item:nth-child(3) { animation-delay: 0.06s; }
+.inventory-item:nth-child(4) { animation-delay: 0.08s; }
+.inventory-item:nth-child(5) { animation-delay: 0.10s; }
+.inventory-item:nth-child(6) { animation-delay: 0.12s; }
+.inventory-item:nth-child(7) { animation-delay: 0.14s; }
+.inventory-item:nth-child(8) { animation-delay: 0.16s; }
+.inventory-item:nth-child(9) { animation-delay: 0.18s; }
+.inventory-item:nth-child(10) { animation-delay: 0.20s; }
+
+@keyframes itemSlide {
+    0% {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .inventory-item .name {
@@ -449,11 +605,130 @@ body {
     font-size: 18px;
 }
 
+/* ============ АПГРЕЙД ============ */
+.upgrade-slot {
+    background: rgba(15, 15, 25, 0.6);
+    border: 2px dashed rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.upgrade-slot.active {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.upgrade-slot .item-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.upgrade-slot .item-price {
+    font-size: 14px;
+    color: #00d4ff;
+}
+
+.upgrade-slot .slot-label {
+    color: #6a7a8e;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.upgrade-result {
+    text-align: center;
+    padding: 20px;
+    border-radius: 12px;
+    margin: 10px 0;
+}
+
+.upgrade-result.success {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid #00d4ff;
+}
+
+.upgrade-result.fail {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid #ff4444;
+}
+
+/* ============ ДРУЗЬЯ ============ */
+.friend-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.friend-status .online {
+    color: #00ff00;
+}
+
+.friend-status .offline {
+    color: #6a7a8e;
+}
+
+/* ============ ТОП ИГРОКОВ ============ */
+.top-user {
+    border-color: #ffd700 !important;
+    background: rgba(255, 215, 0, 0.05) !important;
+}
+
+.top-user .place {
+    color: #ffd700;
+    font-weight: 700;
+}
+
+/* ============ АЧИВКИ ============ */
+.achievement-progress {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    height: 6px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.achievement-progress .bar {
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.5s ease;
+}
+
+.achievement-progress .bar.done {
+    background: #00d4ff;
+}
+
+.achievement-progress .bar.pending {
+    background: rgba(0, 212, 255, 0.3);
+}
+
 /* ============ ЗАГРУЗКА ============ */
 .loading {
     text-align: center;
     padding: 30px;
     color: rgba(255,255,255,0.4);
+}
+
+/* ============ СКЕЛЕТОН ============ */
+.skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+    height: 60px;
+    margin-bottom: 8px;
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 
 /* ============ АДАПТАЦИЯ ============ */
