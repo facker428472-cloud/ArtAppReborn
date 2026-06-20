@@ -1,5 +1,4 @@
-/* static/css/style.css */
-
+/* ============ ОСНОВНЫЕ СТИЛИ ============ */
 * {
     margin: 0;
     padding: 0;
@@ -8,21 +7,82 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f5f7fa;
-    color: #1a1a2e;
+    background: #0a0a0f;
+    color: #ffffff;
     min-height: 100vh;
-    padding: 12px;
-    padding-bottom: 80px;
     overflow-x: hidden;
 }
 
-/* ============ ЭКРАНЫ ============ */
-.screen {
+/* ============ ЭКРАН СОГЛАШЕНИЯ ============ */
+#terms-screen {
     display: none;
+    flex-direction: column;
+    padding: 20px;
+    height: 100vh;
+    background: #0a0a0f;
+    overflow-y: auto;
+    color: #fff;
 }
 
-.screen.active {
-    display: block;
+#terms-screen.active {
+    display: flex;
+}
+
+.terms-content {
+    background: rgba(255,255,255,0.03);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid rgba(0,212,255,0.1);
+    flex: 1;
+    overflow-y: auto;
+    font-size: 13px;
+    color: #c0c0c0;
+    line-height: 1.8;
+    margin-bottom: 15px;
+}
+
+.terms-content .section-title {
+    font-weight: 700;
+    color: #00d4ff;
+    font-size: 16px;
+    margin: 15px 0 10px 0;
+}
+
+.terms-content .section-title:first-child {
+    margin-top: 0;
+}
+
+.terms-content .text {
+    margin-bottom: 12px;
+}
+
+.terms-content .text-indent {
+    margin-left: 15px;
+    margin-bottom: 8px;
+}
+
+.terms-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.terms-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: #00d4ff;
+    cursor: pointer;
+}
+
+.terms-checkbox label {
+    color: #c0c0c0;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.terms-btn {
+    margin-top: 5px;
 }
 
 /* ============ ХЕДЕР ============ */
@@ -30,8 +90,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0 16px 0;
-    border-bottom: 2px solid #e8ecf0;
+    padding: 12px 16px 16px 16px;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.15);
 }
 
 .balance {
@@ -40,42 +100,42 @@ body {
     gap: 10px;
     font-size: 22px;
     font-weight: 700;
-    color: #1a5276;
-}
-
-.balance img {
-    width: 32px;
-    height: 32px;
+    color: #00d4ff;
 }
 
 .profile-btn {
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    border: 2px solid #1a5276;
+    border: 2px solid #00d4ff;
     overflow: hidden;
     cursor: pointer;
-    background: white;
-    transition: transform 0.2s;
+    background: rgba(0, 212, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.15);
+    transition: all 0.3s ease;
 }
 
 .profile-btn:active {
     transform: scale(0.92);
+    box-shadow: 0 0 40px rgba(0, 212, 255, 0.3);
 }
 
-.profile-btn img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+.profile-btn span {
+    font-size: 28px;
+    line-height: 1;
 }
 
 /* ============ ГЛАВНЫЙ ЭКРАН ============ */
 .welcome-text {
     font-size: 28px;
     font-weight: 700;
-    color: #1a5276;
+    color: #00d4ff;
     text-align: center;
     padding: 16px 0 8px 0;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
 }
 
 .grid {
@@ -83,22 +143,25 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
     margin-top: 12px;
+    padding: 0 12px;
 }
 
 .card {
-    background: white;
+    background: rgba(15, 15, 25, 0.85);
     border-radius: 16px;
     padding: 18px 12px;
     text-align: center;
-    border: 2px solid #e8ecf0;
+    border: 1px solid rgba(0, 212, 255, 0.12);
+    backdrop-filter: blur(10px);
     cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 .card:active {
     transform: scale(0.95);
-    border-color: #1a5276;
+    border-color: #00d4ff;
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
 }
 
 .card-icon {
@@ -110,34 +173,22 @@ body {
 .card-title {
     font-size: 14px;
     font-weight: 600;
-    color: #1a1a2e;
+    color: #e0e0e0;
 }
 
 .card-sub {
     font-size: 11px;
-    color: #7a7a8e;
+    color: rgba(255,255,255,0.4);
 }
 
-/* ============ ЗАГОЛОВКИ СТРАНИЦ ============ */
-.page-title {
-    text-align: center;
-    font-size: 24px;
-    font-weight: 700;
-    color: #1a5276;
-    padding: 8px 0 16px 0;
+/* ============ КАРТОЧКА ПОДПИСКИ ============ */
+.subscribe-card {
+    border-color: rgba(255,215,0,0.3) !important;
+    background: rgba(255,215,0,0.05) !important;
 }
 
-.modal-close {
-    font-size: 28px;
-    cursor: pointer;
-    color: #7a7a8e;
-    background: none;
-    border: none;
-    padding: 0 8px;
-}
-
-.modal-close:hover {
-    color: #1a5276;
+.subscribe-card .card-title {
+    color: #ffd700 !important;
 }
 
 /* ============ КНОПКИ ============ */
@@ -146,29 +197,137 @@ body {
     width: 100%;
     padding: 16px;
     margin: 8px 0;
-    border: 2px solid #d0d5dd;
+    border: 2px solid rgba(0, 212, 255, 0.2);
     border-radius: 12px;
-    background: white;
+    background: rgba(15, 15, 25, 0.6);
     font-size: 16px;
     font-weight: 600;
-    color: #1a1a2e;
+    color: #e0e0e0;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     text-align: center;
 }
 
 .case-btn:active {
     transform: scale(0.97);
+    border-color: #00d4ff;
 }
 
 .case-btn.primary {
-    background: #1a5276;
-    color: white;
-    border-color: #1a5276;
+    background: #00d4ff;
+    color: #0a0a0f;
+    border-color: #00d4ff;
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
 }
 
 .case-btn.primary:active {
-    background: #154360;
+    background: #00b8e6;
+}
+
+/* ============ ПРЕДУПРЕЖДЕНИЕ ============ */
+.frozen-warning {
+    background: rgba(255, 0, 0, 0.15);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 8px 12px;
+    color: #ff4444;
+    font-weight: 700;
+    text-align: center;
+    margin: 8px 12px;
+    display: none;
+    font-size: 14px;
+}
+
+/* ============ МОДАЛЬНОЕ ОКНО ============ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.7);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    backdrop-filter: blur(8px);
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: #0f0f19;
+    border-radius: 24px;
+    padding: 24px;
+    max-width: 400px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    border: 1px solid rgba(0, 212, 255, 0.15);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #00d4ff;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.modal-close {
+    font-size: 24px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.4);
+    background: none;
+    border: none;
+    float: right;
+    padding: 0 8px;
+}
+
+.modal-close:hover {
+    color: #00d4ff;
+}
+
+/* ============ СКРОЛЛ ============ */
+.scrollable {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 0 4px;
+}
+
+.scrollable::-webkit-scrollbar {
+    width: 4px;
+}
+
+.scrollable::-webkit-scrollbar-thumb {
+    background: #00d4ff;
+    border-radius: 4px;
+}
+
+.scrollable::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* ============ СТРАНИЦЫ ============ */
+.page-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: #00d4ff;
+    padding: 8px 0 16px 0;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.1);
+}
+
+.screen {
+    display: none;
+}
+
+.screen.active {
+    display: block;
 }
 
 /* ============ ИНВЕНТАРЬ ============ */
@@ -177,20 +336,20 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    background: white;
+    background: rgba(15, 15, 25, 0.6);
     border-radius: 12px;
     margin-bottom: 8px;
-    border: 1px solid #e8ecf0;
+    border: 1px solid rgba(0, 212, 255, 0.08);
 }
 
 .inventory-item .name {
     font-weight: 500;
-    color: #1a1a2e;
+    color: #e0e0e0;
     flex: 1;
 }
 
 .inventory-item .price {
-    color: #1a5276;
+    color: #00d4ff;
     font-weight: 600;
     margin: 0 12px;
 }
@@ -211,22 +370,22 @@ body {
 }
 
 .btn-sell {
-    background: #1a5276;
-    color: white;
+    background: #00d4ff;
+    color: #0a0a0f;
 }
 
 .btn-sell:active {
-    background: #154360;
+    background: #00b8e6;
 }
 
 .btn-withdraw {
     background: transparent;
-    color: #1a5276;
-    border: 1px solid #1a5276;
+    color: #00d4ff;
+    border: 1px solid #00d4ff;
 }
 
 .btn-withdraw:active {
-    background: #e8ecf0;
+    background: rgba(0, 212, 255, 0.1);
 }
 
 /* ============ ПРОФИЛЬ ============ */
@@ -234,18 +393,18 @@ body {
     display: flex;
     justify-content: space-between;
     padding: 12px 16px;
-    background: white;
+    background: rgba(15, 15, 25, 0.6);
     border-radius: 12px;
     margin-bottom: 6px;
-    border: 1px solid #e8ecf0;
+    border: 1px solid rgba(0, 212, 255, 0.08);
 }
 
 .profile-field .label {
-    color: #7a7a8e;
+    color: rgba(255,255,255,0.4);
 }
 
 .profile-field .value {
-    color: #1a1a2e;
+    color: #e0e0e0;
     font-weight: 500;
 }
 
@@ -254,7 +413,7 @@ body {
     text-align: center;
     padding: 20px;
     font-size: 18px;
-    color: #7a7a8e;
+    color: rgba(255,255,255,0.4);
 }
 
 /* ============ PVP ============ */
@@ -262,11 +421,11 @@ body {
     display: flex;
     gap: 10px;
     align-items: center;
-    padding: 8px 0;
+    padding: 8px 12px;
 }
 
 .pvp-case-select span {
-    color: #7a7a8e;
+    color: rgba(255,255,255,0.4);
     font-weight: 500;
 }
 
@@ -279,107 +438,38 @@ body {
 .pvp-status {
     text-align: center;
     padding: 12px;
-    color: #7a7a8e;
+    color: rgba(255,255,255,0.4);
 }
 
 .pvp-result {
     text-align: center;
     padding: 12px;
-    color: #1a5276;
+    color: #00d4ff;
     font-weight: 600;
     font-size: 18px;
-}
-
-/* ============ МОДАЛЬНОЕ ОКНО ============ */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 20px;
-    backdrop-filter: blur(4px);
-}
-
-.modal.active {
-    display: flex;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 24px;
-    padding: 24px;
-    max-width: 380px;
-    width: 100%;
-    max-height: 85vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-}
-
-.modal-content .modal-close {
-    float: right;
-}
-
-.modal-title {
-    font-size: 22px;
-    font-weight: 700;
-    color: #1a5276;
-    text-align: center;
-    margin-bottom: 12px;
-}
-
-/* ============ СКРОЛЛ ============ */
-.scrollable {
-    max-height: 60vh;
-    overflow-y: auto;
-}
-
-::-webkit-scrollbar {
-    width: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #1a5276;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-track {
-    background: transparent;
 }
 
 /* ============ ЗАГРУЗКА ============ */
 .loading {
     text-align: center;
     padding: 30px;
-    color: #7a7a8e;
+    color: rgba(255,255,255,0.4);
 }
 
-/* ============ АНИМАЦИЯ КЕЙСА ============ */
-.case-animation {
-    text-align: center;
-    padding: 30px 0;
+/* ============ АДАПТАЦИЯ ============ */
+@media (max-width: 380px) {
+    .balance { font-size: 18px; }
+    .profile-btn { width: 44px; height: 44px; }
+    .profile-btn span { font-size: 22px; }
+    .card { padding: 14px 8px; }
+    .card-icon { font-size: 26px; }
+    .card-title { font-size: 12px; }
+    .welcome-text { font-size: 22px; }
 }
 
-.case-animation .icon {
-    font-size: 64px;
-    display: block;
-    animation: bounce 0.6s infinite alternate;
-}
-
-@keyframes bounce {
-    from { transform: translateY(0); }
-    to { transform: translateY(-20px); }
-}
-
-.case-result {
-    text-align: center;
-    font-size: 20px;
-    font-weight: 700;
-    padding: 12px 0;
-    color: #1a5276;
+@media (min-width: 600px) {
+    .grid { gap: 14px; }
+    .card { padding: 24px 16px; }
+    .card-icon { font-size: 40px; }
+    .card-title { font-size: 16px; }
 }
