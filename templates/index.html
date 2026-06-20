@@ -35,8 +35,9 @@
                     <span style="font-size:24px;">🪙</span>
                     <span id="coinsValue">0</span>
                 </div>
-                <div class="profile-btn" onclick="showScreen('profile')">
-                    <span>👤</span>
+                <div class="profile-btn" onclick="showScreen('profile')" id="avatarBtn">
+                    <img id="userAvatar" src="" alt="avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
+                    <div class="online-status"></div>
                 </div>
             </div>
             <div id="frozenWarning" class="frozen-warning">❄️ АККАУНТ ЗАМОРОЖЕН — отрицательный баланс!</div>
@@ -62,15 +63,25 @@
                     <div class="card-title" data-i18n="wheel">КОЛЕСО</div>
                     <div class="card-sub">Крути и выигрывай</div>
                 </div>
-                <div class="card" onclick="showScreen('profile')">
-                    <div class="card-icon">👤</div>
-                    <div class="card-title" data-i18n="profile">ПРОФИЛЬ</div>
-                    <div class="card-sub">Ваша статистика</div>
+                <div class="card" onclick="showScreen('top')">
+                    <div class="card-icon">🏆</div>
+                    <div class="card-title">ТОП ИГРОКОВ</div>
+                    <div class="card-sub">Рейтинг лучших</div>
                 </div>
                 <div class="card" onclick="showScreen('achievements')">
                     <div class="card-icon">🏅</div>
                     <div class="card-title" data-i18n="achievements">ДОСТИЖЕНИЯ</div>
                     <div class="card-sub">Награды</div>
+                </div>
+                <div class="card" onclick="showScreen('friends')">
+                    <div class="card-icon">👥</div>
+                    <div class="card-title">ДРУЗЬЯ</div>
+                    <div class="card-sub">Добавляй и смотри</div>
+                </div>
+                <div class="card" onclick="showScreen('upgrade')">
+                    <div class="card-icon">⬆️</div>
+                    <div class="card-title">АПГРЕЙД</div>
+                    <div class="card-sub">Улучшай скины</div>
                 </div>
             </div>
             <div style="margin-top:10px;padding:0 12px;">
@@ -165,6 +176,46 @@
             <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
         </div>
 
+        <!-- ============ ЭКРАН ТОП ИГРОКОВ ============ -->
+        <div id="top-screen" class="screen" style="display:none;">
+            <div class="header">
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="topCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
+            </div>
+            <div class="page-title">🏆 ТОП ИГРОКОВ</div>
+            <div id="topList" class="scrollable" style="padding:10px;"></div>
+            <div id="userPlace" style="padding:10px;margin:10px;border:2px solid #00d4ff;border-radius:12px;background:rgba(0,212,255,0.05);"></div>
+            <button class="case-btn" onclick="showScreen('main')" style="margin:10px;">◀️ НАЗАД</button>
+        </div>
+
+        <!-- ============ ЭКРАН ДРУЗЬЯ ============ -->
+        <div id="friends-screen" class="screen" style="display:none;">
+            <div class="header">
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="friendsCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
+            </div>
+            <div class="page-title">👥 ДРУЗЬЯ</div>
+            
+            <div style="padding:10px;">
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="friendSearchInput" placeholder="Введите ID или имя" 
+                        style="flex:1;padding:12px;border:2px solid #00d4ff;border-radius:12px;font-size:14px;background:rgba(0,0,0,0.3);color:#fff;">
+                    <button class="case-btn" onclick="searchFriends()" style="flex:0 0 auto;padding:12px 20px;margin:0;">🔍</button>
+                </div>
+                <div id="friendSearchResults" style="margin-top:10px;"></div>
+            </div>
+            
+            <div style="padding:10px;">
+                <div style="color:#6a7a8e;font-size:12px;text-transform:uppercase;padding:4px 0;">👥 Мои друзья</div>
+                <div id="friendsList" style="margin-top:5px;"></div>
+                
+                <div style="color:#6a7a8e;font-size:12px;text-transform:uppercase;padding:12px 0 4px 0;">📩 Заявки в друзья</div>
+                <div id="friendRequests" style="margin-top:5px;"></div>
+            </div>
+            
+            <button class="case-btn" onclick="showScreen('main')" style="margin:10px;">◀️ НАЗАД</button>
+        </div>
+
         <!-- ============ ЭКРАН ДОСТИЖЕНИЙ ============ -->
         <div id="achievements-screen" class="screen" style="display:none;">
             <div class="header">
@@ -174,6 +225,51 @@
             <div class="page-title" data-i18n="achievements">ДОСТИЖЕНИЯ</div>
             <div id="achievementsList" class="scrollable" style="padding:10px;"></div>
             <button class="case-btn" onclick="showScreen('main')" data-i18n="back" style="margin:10px;">◀️ НАЗАД</button>
+        </div>
+
+        <!-- ============ ЭКРАН АПГРЕЙДА ============ -->
+        <div id="upgrade-screen" class="screen" style="display:none;">
+            <div class="header">
+                <div class="balance"><span style="font-size:24px;">🪙</span><span id="upgradeCoins">0</span></div>
+                <button class="modal-close" onclick="showScreen('main')">✕</button>
+            </div>
+            <div class="page-title">⬆️ АПГРЕЙД</div>
+            
+            <div style="padding:10px;">
+                <div style="color:#6a7a8e;font-size:12px;text-transform:uppercase;padding:4px 0;">⬇️ Вход</div>
+                <div id="sourceSlot" class="upgrade-slot" onclick="selectSourceItem()">
+                    <div style="color:#6a7a8e;font-size:14px;">Выберите предмет</div>
+                </div>
+                
+                <div style="color:#6a7a8e;font-size:12px;text-transform:uppercase;padding:12px 0 4px 0;">⬆️ Выход</div>
+                <div id="targetSlot" class="upgrade-slot" onclick="selectTargetItem()">
+                    <div style="color:#6a7a8e;font-size:14px;">Выберите цель</div>
+                </div>
+                
+                <div id="upgradeInfo" style="margin-top:12px;display:none;">
+                    <div class="profile-field">
+                        <span class="label">🎯 Шанс</span>
+                        <span class="value" id="upgradeChance">0%</span>
+                    </div>
+                    <div class="profile-field">
+                        <span class="label">📈 Коэффициент</span>
+                        <span class="value" id="upgradeCoeff">1x</span>
+                    </div>
+                    <div class="profile-field">
+                        <span class="label">💰 Прибыль</span>
+                        <span class="value" id="upgradeProfit">+0 🪙</span>
+                    </div>
+                    <div class="profile-field">
+                        <span class="label">⚠️ Риск</span>
+                        <span class="value" id="upgradeRisk">-</span>
+                    </div>
+                </div>
+                
+                <button class="case-btn primary" onclick="executeUpgrade()" id="upgradeBtn" disabled>
+                    ⬆️ АПГРЕЙД
+                </button>
+                <button class="case-btn" onclick="showScreen('main')" style="margin:10px 0;">◀️ НАЗАД</button>
+            </div>
         </div>
 
         <!-- ============ АДМИН-ПАНЕЛЬ ============ -->
