@@ -17,6 +17,14 @@ let dailyRewardDay = 0;
 let termsTimer = 10;
 let termsInterval = null;
 
+// ============ АПГРЕЙД ============
+let selectedSource = null;
+let selectedTarget = null;
+let upgradeItems = [];
+
+// ============ ДРУЗЬЯ ============
+let friendSearchResults = [];
+
 // ============ ПЕРЕВОДЫ ============
 const LANG = {
     'ru': {
@@ -315,14 +323,75 @@ function loginOrRegister(uid, uname) {
                 localStorage.setItem('isAdmin', 'true');
             }
             
+            loadUserAvatar();
             loadBalance();
             checkDailyReward();
             checkWithdrawStatus();
+            
+            // Обновляем онлайн-статус каждые 30 секунд
+            setInterval(updateOnlineStatus, 30000);
         } else {
             console.error('Login failed:', data.error);
         }
     })
     .catch(err => console.error('Login error:', err));
+}
+
+// ============ АВАТАРКА ============
+function loadUserAvatar() {
+    const avatarImg = document.getElementById('userAvatar');
+    if (!avatarImg) return;
+    
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        const user = tg.initDataUnsafe.user;
+        
+        if (user.photo_url) {
+            avatarImg.src = user.photo_url;
+            return;
+        }
+        
+        const username = user.username || user.first_name || 'U';
+        const firstLetter = username.charAt(0).toUpperCase();
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+        
+        const colors = ['#00d4ff', '#ff6b6b', '#ffd700', '#6bff6b', '#ff6bff', '#6b6bff', '#ff8844', '#44ff88'];
+        const colorIndex = username.length % colors.length;
+        ctx.fillStyle = colors[colorIndex];
+        ctx.fillRect(0, 0, 100, 100);
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 50px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(firstLetter, 50, 55);
+        
+        avatarImg.src = canvas.toDataURL('image/png');
+    }
+}
+
+function updateOnlineStatus() {
+    const status = document.querySelector('.online-status');
+    if (!status) return;
+    
+    fetch(`/api/miniapp_profile?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.last_activity) {
+            const lastActive = new Date(data.last_activity);
+            const now = new Date();
+            const diff = (now - lastActive) / 1000;
+            
+            if (diff < 120) {
+                status.classList.add('online');
+            } else {
+                status.classList.remove('online');
+            }
+        }
+    })
+    .catch(() => {});
 }
 
 function loadBalance() {
@@ -341,7 +410,7 @@ function loadBalance() {
         document.querySelectorAll('.balance span:last-child').forEach(el => {
             el.textContent = coins;
         });
-        document.querySelectorAll('#casesCoins, #invCoins, #profileCoins, #wheelCoins, #pvpCoins, #achCoins, #adminCoins').forEach(el => {
+        document.querySelectorAll('#casesCoins, #invCoins, #profileCoins, #wheelCoins, #pvpCoins, #achCoins, #adminCoins, #topCoins, #friendsCoins, #upgradeCoins').forEach(el => {
             if (el) el.textContent = coins;
         });
         
@@ -374,6 +443,9 @@ function showScreen(screen) {
     if (screen === 'wheel') loadWheelStatus();
     if (screen === 'promo') showPromoModal();
     if (screen === 'daily') claimDailyReward();
+    if (screen === 'top') loadTopPlayers();
+    if (screen === 'friends') loadFriends();
+    if (screen === 'upgrade') loadUpgradeItems();
     
     if (tg) tg.HapticFeedback.impactOccurred('light');
 }
@@ -392,7 +464,11 @@ function showModal(title, content) {
     if (modal) modal.classList.add('active');
 }
 
-// ============ ПЛАВНАЯ АНИМАЦИЯ КЕЙСОВ ============
+function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// ============ АНИМАЦИИ КЕЙСОВ И КОЛЕСА (с плавным замедлением) ============
 class CaseAnimation {
     constructor(caseName, callback) {
         this.caseName = caseName;
@@ -472,14 +548,22 @@ class CaseAnimation {
     
     nextSkin() {
         if (!this.isSpinning) return;
-        const name = this.skins[this.currentIndex % this.skins.length][0];
-        const price = this.skins[this.currentIndex % this.skins.length][1];
-        this.resultItem = name;
-        this.resultPrice = price;
-        this.currentSkinLabel.textContent = name;
-        this.currentPriceLabel.textContent = price + ' 🪙';
-        const progress = this.currentIndex / this.stopAt;
-        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * Math.min(progress, 1);
+        
+        this.currentSkinLabel.style.opacity = '0';
+        setTimeout(() => {
+            const name = this.skins[this.currentIndex % this.skins.length][0];
+            const price = this.skins[this.currentIndex % this.skins.length][1];
+            this.resultItem = name;
+            this.resultPrice = price;
+            this.currentSkinLabel.textContent = name;
+            this.currentPriceLabel.textContent = price + ' 🪙';
+            this.currentSkinLabel.style.opacity = '1';
+        }, 50);
+        
+        const progress = Math.min(this.currentIndex / this.stopAt, 1);
+        const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOut(progress);
+        
         for (let i = 0; i < this.skinElements.length; i++) {
             const el = this.skinElements[i];
             const idx = (this.currentIndex + i) % this.skins.length;
@@ -514,18 +598,16 @@ class CaseAnimation {
     }
 }
 
-// ============ ПЛАВНАЯ АНИМАЦИЯ КОЛЕСА ============
 class WheelAnimation {
     constructor(callback) {
         this.callback = callback;
         this.prizes = [
             ["50 🪙", 50, "coins"], ["100 🪙", 100, "coins"],
-            ["250 🪙", 250, "coins"], ["500 🪙", 500, "coins"],
-            ["1000 🪙", 1000, "coins"], ["5% 🏷️", 5, "discount"],
-            ["10% 🏷️", 10, "discount"], ["15% 🏷️", 15, "discount"],
-            ["25% 🏷️", 25, "discount"], ["🥫 БОМЖ", "bomj", "case"],
-            ["🦅 БЕРКУТ", "berkut", "case"], ["🏆 ЧЕМПИОН", "champion", "case"],
-            ["📦 DRAFT", "draft", "case"]
+            ["150 🪙", 150, "coins"], ["200 🪙", 200, "coins"],
+            ["300 🪙", 300, "coins"], ["500 🪙", 500, "coins"],
+            ["750 🪙", 750, "coins"], ["1000 🪙", 1000, "coins"],
+            ["5% 🏷️", 5, "discount"], ["10% 🏷️", 10, "discount"],
+            ["15% 🏷️", 15, "discount"], ["25% 🏷️", 25, "discount"]
         ];
         this.currentIndex = 0;
         this.isSpinning = true;
@@ -571,13 +653,17 @@ class WheelAnimation {
     
     nextPrize() {
         if (!this.isSpinning) return;
+        
         const name = this.prizes[this.currentIndex % this.prizes.length][0];
         const value = this.prizes[this.currentIndex % this.prizes.length][1];
         const type = this.prizes[this.currentIndex % this.prizes.length][2];
         this.result = {name, value, type};
         this.currentPrizeLabel.textContent = name;
-        const progress = this.currentIndex / this.stopAt;
-        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * Math.min(progress, 1);
+        
+        const progress = Math.min(this.currentIndex / this.stopAt, 1);
+        const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOut(progress);
+        
         for (let i = 0; i < this.prizeElements.length; i++) {
             const el = this.prizeElements[i];
             const idx = (this.currentIndex + i) % this.prizes.length;
@@ -608,10 +694,6 @@ class WheelAnimation {
             if (this.callback) this.callback(this.result);
         }, 1500);
     }
-}
-
-function randomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 // ============ ЕЖЕДНЕВНАЯ НАГРАДА ============
@@ -1097,7 +1179,6 @@ function spinWheel() {
                 let msg = '';
                 if (result.type === 'coins') msg = `🎉 Вы выиграли ${result.value} 🪙!`;
                 else if (result.type === 'discount') msg = `🎉 Вы выиграли ${result.value}% скидку!`;
-                else if (result.type === 'case') msg = `🎉 Вы выиграли ${result.name}!`;
                 showModal('🎡 КОЛЕСО', `<div style="text-align:center;font-size:24px;color:#00d4ff;">${msg}</div>`);
                 loadBalance();
                 loadWheelStatus();
@@ -1216,18 +1297,273 @@ function startPvpBattle(battleId) {
     });
 }
 
-// ============ ДОСТИЖЕНИЯ ============
+// ============ ТОП ИГРОКОВ ============
+function loadTopPlayers() {
+    const list = document.getElementById('topList');
+    const userPlace = document.getElementById('userPlace');
+    if (!list) return;
+    
+    list.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
+    
+    fetch(`/api/top_players?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        let html = '';
+        if (data.top && data.top.length > 0) {
+            data.top.forEach((p, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${p.place}.`;
+                html += `
+                    <div class="inventory-item" style="${p.id == userId ? 'border-color:#00d4ff;background:rgba(0,212,255,0.05);' : ''}">
+                        <span><strong>${medal}</strong> ${p.username}</span>
+                        <span>🪙 ${p.coins}</span>
+                        <span>👥 ${p.referrals}</span>
+                        <span>📦 ${p.items}</span>
+                        <span>💳 ${p.deposit} RUB</span>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<div style="text-align:center;color:#6a7a8e;padding:30px 0;">🏆 Нет игроков в топе</div>';
+        }
+        list.innerHTML = html;
+        
+        if (data.user) {
+            userPlace.innerHTML = `
+                <div style="font-weight:700;color:#00d4ff;padding:8px 0;">📍 ТВОЁ МЕСТО</div>
+                <div class="inventory-item" style="border-color:#ffd700;background:rgba(255,215,0,0.05);">
+                    <span><strong>#${data.user.place}</strong> ${data.user.username}</span>
+                    <span>🪙 ${data.user.coins}</span>
+                    <span>👥 ${data.user.referrals}</span>
+                    <span>📦 ${data.user.items}</span>
+                    <span>💳 ${data.user.deposit} RUB</span>
+                </div>
+            `;
+        } else {
+            userPlace.innerHTML = '<div style="text-align:center;color:#6a7a8e;padding:8px 0;">⚠️ Вы не в рейтинге</div>';
+        }
+    })
+    .catch(() => {
+        list.innerHTML = '<div style="text-align:center;color:#ff4444;padding:30px 0;">❌ Ошибка загрузки</div>';
+    });
+}
+
+// ============ ДРУЗЬЯ ============
+function searchFriends() {
+    const input = document.getElementById('friendSearchInput');
+    const results = document.getElementById('friendSearchResults');
+    if (!input || !input.value) {
+        results.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">Введите ID или имя</div>';
+        return;
+    }
+    
+    results.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">⏳ Поиск...</div>';
+    
+    fetch(`/api/search_user?user_id=${userId}&search_id=${encodeURIComponent(input.value)}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            results.innerHTML = `<div style="color:#ff4444;padding:8px 0;">❌ ${data.error}</div>`;
+            return;
+        }
+        
+        if (data.users && data.users.length > 0) {
+            let html = '';
+            data.users.forEach(u => {
+                const status = u.is_online ? '🟢 Онлайн' : '⚪ Офлайн';
+                html += `
+                    <div class="inventory-item">
+                        <span><strong>${u.username}</strong> (${status})</span>
+                        <span>🪙 ${u.coins} ⭐${u.level}</span>
+                        <span>${u.is_friend ? '✅ В друзьях' : ''}</span>
+                        <div>
+                            ${!u.is_friend && !u.request_sent && !u.request_received && u.id != userId ? 
+                                `<button class="btn-sell" onclick="sendFriendRequest(${u.id})">➕</button>` : ''}
+                            ${u.request_sent ? '<span style="color:#ffd700;">⏳ Отправлено</span>' : ''}
+                            ${u.request_received ? `<button class="btn-sell" onclick="acceptFriendRequest(${u.id})">✅ Принять</button>` : ''}
+                            ${u.is_friend ? `<button class="btn-withdraw" onclick="removeFriend(${u.id})" style="border-color:#ff4444;color:#ff4444;">❌</button>` : ''}
+                            ${u.id == userId ? '👤 Это вы' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            results.innerHTML = html;
+        } else {
+            results.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">Пользователь не найден</div>';
+        }
+    })
+    .catch(() => {
+        results.innerHTML = '<div style="color:#ff4444;padding:8px 0;">❌ Ошибка соединения</div>';
+    });
+}
+
+function sendFriendRequest(friendId) {
+    fetch('/api/send_friend_request', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, friend_id: friendId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showModal('✅ ЗАЯВКА ОТПРАВЛЕНА', 'Заявка в друзья отправлена!');
+            searchFriends();
+        } else {
+            showModal('❌ ОШИБКА', data.error);
+        }
+    });
+}
+
+function acceptFriendRequest(friendId) {
+    fetch('/api/accept_friend', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, friend_id: friendId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showModal('✅ ДРУГ ДОБАВЛЕН!', data.message);
+            searchFriends();
+            loadFriends();
+        } else {
+            showModal('❌ ОШИБКА', data.error);
+        }
+    });
+}
+
+function removeFriend(friendId) {
+    if (!confirm('Удалить друга?')) return;
+    fetch('/api/remove_friend', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, friend_id: friendId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showModal('✅ УДАЛЁН', 'Друг удалён');
+            searchFriends();
+            loadFriends();
+        } else {
+            showModal('❌ ОШИБКА', data.error);
+        }
+    });
+}
+
+function loadFriends() {
+    const list = document.getElementById('friendsList');
+    const requestsList = document.getElementById('friendRequests');
+    if (!list) return;
+    
+    list.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">⏳ Загрузка...</div>';
+    requestsList.innerHTML = '';
+    
+    fetch(`/api/get_friends?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        // Друзья
+        if (data.friends && data.friends.length > 0) {
+            let html = '';
+            data.friends.forEach(f => {
+                const status = f.is_online ? '🟢 Онлайн' : '⚪ Офлайн';
+                html += `
+                    <div class="inventory-item">
+                        <span><strong>${f.username}</strong> (${status})</span>
+                        <span>🪙 ${f.coins} ⭐${f.level}</span>
+                        <span>📦 ${f.items_count}</span>
+                        <button class="btn-withdraw" onclick="viewFriendInventory(${f.id})">👁️</button>
+                        <button class="btn-withdraw" onclick="window.open('tg://resolve?domain=${f.username}','_blank')" style="border-color:#00d4ff;">💬</button>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        } else {
+            list.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">👥 Нет друзей. Добавьте кого-нибудь!</div>';
+        }
+        
+        // Заявки
+        if (data.requests && data.requests.length > 0) {
+            let html = '';
+            data.requests.forEach(r => {
+                html += `
+                    <div class="inventory-item">
+                        <span><strong>${r.username}</strong></span>
+                        <span>🪙 ${r.coins} ⭐${r.level}</span>
+                        <div>
+                            <button class="btn-sell" onclick="acceptFriendRequest(${r.id})">✅</button>
+                            <button class="btn-withdraw" onclick="rejectFriendRequest(${r.id})" style="border-color:#ff4444;color:#ff4444;">❌</button>
+                        </div>
+                    </div>
+                `;
+            });
+            requestsList.innerHTML = html;
+        } else {
+            requestsList.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">📩 Нет заявок</div>';
+        }
+    })
+    .catch(() => {
+        list.innerHTML = '<div style="color:#ff4444;padding:8px 0;">❌ Ошибка загрузки</div>';
+    });
+}
+
+function rejectFriendRequest(friendId) {
+    fetch('/api/reject_friend', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, friend_id: friendId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            loadFriends();
+        }
+    });
+}
+
+function viewFriendInventory(friendId) {
+    fetch(`/api/admin/view_inventory/${friendId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.items && data.items.length > 0) {
+            let html = '<div style="font-weight:700;color:#00d4ff;padding:8px 0;">📦 ИНВЕНТАРЬ ДРУГА:</div>';
+            data.items.slice(0, 20).forEach(item => {
+                html += `<div class="inventory-item"><span>${item.name}</span><span>${item.price} 🪙</span></div>`;
+            });
+            showModal('👁️ ИНВЕНТАРЬ', html);
+        } else {
+            showModal('📭 ПУСТО', 'У друга пустой инвентарь');
+        }
+    })
+    .catch(() => showModal('❌ ОШИБКА', 'Не удалось загрузить инвентарь'));
+}
+
+// ============ АЧИВКИ ============
 function loadAchievements() {
     const list = document.getElementById('achievementsList');
     if (!list) return;
     list.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
-    fetch('/api/achievements?user_id=${userId}')
+    fetch(`/api/achievements?user_id=${userId}`)
     .then(res => res.json())
     .then(data => {
         if (data.achievements && data.achievements.length > 0) {
             let html = '';
             data.achievements.forEach(ach => {
-                html += `<div class="inventory-item"><span>${ach.done ? '✅' : '🔒'} ${ach.name}</span><span style="color:#00d4ff;">+${ach.reward}</span></div>`;
+                const progress = ach.progress || 0;
+                const target = ach.target || 100;
+                const percent = Math.min((progress / target) * 100, 100);
+                html += `
+                    <div class="inventory-item" style="flex-direction:column;align-items:stretch;gap:4px;">
+                        <div style="display:flex;justify-content:space-between;">
+                            <span>${ach.done ? '✅' : '🔒'} ${ach.name}</span>
+                            <span style="color:#00d4ff;">+${ach.reward} 🪙</span>
+                        </div>
+                        <div style="font-size:12px;color:#6a7a8e;">${ach.description}</div>
+                        <div style="background:rgba(255,255,255,0.05);border-radius:8px;height:6px;overflow:hidden;">
+                            <div style="background:${ach.done ? '#00d4ff' : 'rgba(0,212,255,0.3)'};width:${percent}%;height:100%;border-radius:8px;transition:width 0.5s;"></div>
+                        </div>
+                        <div style="font-size:11px;color:#6a7a8e;text-align:right;">${progress}/${target}</div>
+                    </div>
+                `;
             });
             list.innerHTML = html;
         } else {
@@ -1273,15 +1609,265 @@ function activatePromo() {
     .catch(() => showModal('❌ ОШИБКА', 'Ошибка соединения'));
 }
 
-// ============ АДМИН-ПАНЕЛЬ ============
-function loadAdminPanel() {
-    const adminFromStorage = localStorage.getItem('isAdmin') === 'true';
-    if (!isAdmin && !adminFromStorage) {
-        showModal('❌ ДОСТУП ЗАПРЕЩЁН', 'У вас нет прав администратора');
+// ============ АПГРЕЙД ============
+function loadUpgradeItems() {
+    fetch(`/api/upgrade_items?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.items) {
+            upgradeItems = data.items;
+        }
+    });
+    
+    // Сбрасываем выбор
+    selectedSource = null;
+    selectedTarget = null;
+    document.getElementById('sourceSlot').innerHTML = '<div style="color:#6a7a8e;font-size:14px;">Выберите предмет</div>';
+    document.getElementById('sourceSlot').classList.remove('active');
+    document.getElementById('targetSlot').innerHTML = '<div style="color:#6a7a8e;font-size:14px;">Выберите цель</div>';
+    document.getElementById('targetSlot').classList.remove('active');
+    document.getElementById('upgradeInfo').style.display = 'none';
+    document.getElementById('upgradeBtn').disabled = true;
+}
+
+function selectSourceItem() {
+    if (upgradeItems.length === 0) {
+        showModal('📭 НЕТ ПРЕДМЕТОВ', 'У вас нет предметов для апгрейда (нужно от 1000 🪙)');
         return;
     }
+    
+    let html = '<div style="font-weight:700;color:#00d4ff;padding:8px 0;">📦 ВЫБЕРИ ПРЕДМЕТ:</div>';
+    upgradeItems.forEach(item => {
+        html += `
+            <div class="inventory-item" onclick="setSource(${item.id}, '${item.name}', ${item.price})">
+                <span>${item.name}</span>
+                <span style="color:#00d4ff;">${item.price} 🪙</span>
+            </div>
+        `;
+    });
+    html += `<button class="case-btn" onclick="closeModal()">❌ ОТМЕНА</button>`;
+    
+    showModal('⬇️ ВХОД', html);
+}
+
+function setSource(id, name, price) {
+    selectedSource = {id, name, price};
+    closeModal();
+    
+    const slot = document.getElementById('sourceSlot');
+    slot.innerHTML = `
+        <div class="item-name">${name}</div>
+        <div class="item-price">${price} 🪙</div>
+    `;
+    slot.classList.add('active');
+    
+    calculateUpgrade();
+    loadBalance();
+}
+
+function selectTargetItem() {
+    if (!selectedSource) {
+        showModal('❌ ОШИБКА', 'Сначала выберите предмет входа');
+        return;
+    }
+    
+    const targets = [
+        {name: 'P250 | Cassette (FT)', price: 2125},
+        {name: 'USP-S | PC-GRN (MW)', price: 3547},
+        {name: 'AK-47 | Elite Build (MW)', price: 20000},
+        {name: 'M4A4 | Magnesium (MW)', price: 12437},
+        {name: 'AWP | Safari Mesh (MW)', price: 6940},
+        {name: 'Desert Eagle | Oxide Blaze (FN)', price: 10017},
+        {name: 'SSG 08 | Fever Dream (FT)', price: 16777},
+        {name: 'M4A1-S | Nitro (FT)', price: 16062},
+        {name: 'Glock-18 | Coral Bloom (FT)', price: 11645},
+        {name: 'AK-47 | Safari Mesh (WW)', price: 2497},
+    ].filter(t => t.price > selectedSource.price);
+    
+    if (targets.length === 0) {
+        showModal('❌ НЕТ ЦЕЛЕЙ', 'Нет доступных целей для апгрейда');
+        return;
+    }
+    
+    let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">🎯 ВЫБЕРИ ЦЕЛЬ:</div>';
+    targets.slice(0, 20).forEach(target => {
+        const diff = target.price - selectedSource.price;
+        const chance = Math.max(5, 95 - (diff / selectedSource.price) * 50);
+        const color = chance > 60 ? '#00d4ff' : chance > 30 ? '#ffd700' : '#ff4444';
+        html += `
+            <div class="inventory-item" onclick="setTarget('${target.name}', ${target.price})">
+                <span>${target.name}</span>
+                <span style="color:${color};">${target.price} 🪙 (${Math.round(chance)}%)</span>
+            </div>
+        `;
+    });
+    html += `<button class="case-btn" onclick="closeModal()">❌ ОТМЕНА</button>`;
+    
+    showModal('⬆️ ВЫХОД', html);
+}
+
+function setTarget(name, price) {
+    selectedTarget = {name, price};
+    closeModal();
+    
+    const slot = document.getElementById('targetSlot');
+    slot.innerHTML = `
+        <div class="item-name">${name}</div>
+        <div class="item-price">${price} 🪙</div>
+    `;
+    slot.classList.add('active');
+    
+    calculateUpgrade();
+}
+
+function calculateUpgrade() {
+    if (!selectedSource || !selectedTarget) return;
+    
+    fetch('/api/upgrade_calculate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            source_id: selectedSource.id,
+            target_price: selectedTarget.price
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('upgradeInfo').style.display = 'block';
+            document.getElementById('upgradeChance').textContent = data.chance + '%';
+            document.getElementById('upgradeCoeff').textContent = data.coefficient + 'x';
+            document.getElementById('upgradeProfit').textContent = '+' + data.profit + ' 🪙';
+            
+            const riskEl = document.getElementById('upgradeRisk');
+            const risk = data.risk;
+            riskEl.textContent = risk;
+            riskEl.style.color = risk === 'ВЫСОКИЙ' ? '#ff4444' : risk === 'СРЕДНИЙ' ? '#ffd700' : '#00d4ff';
+            
+            document.getElementById('upgradeBtn').disabled = false;
+        }
+    });
+}
+
+function executeUpgrade() {
+    if (!selectedSource || !selectedTarget) return;
+    
+    const btn = document.getElementById('upgradeBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ АПГРЕЙД...';
+    
+    if (tg) tg.HapticFeedback.impactOccurred('heavy');
+    
+    fetch('/api/upgrade_execute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            user_id: userId,
+            source_id: selectedSource.id,
+            target_name: selectedTarget.name,
+            target_price: selectedTarget.price
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = '⬆️ АПГРЕЙД';
+        
+        if (data.success && data.upgraded) {
+            showModal('🎉 АПГРЕЙД УСПЕШЕН!', `
+                <div style="text-align:center;padding:10px 0;">
+                    <div style="font-size:48px;margin:10px 0;">🎉</div>
+                    <div style="font-size:20px;font-weight:700;color:#00d4ff;">${data.target_name}</div>
+                    <div style="font-size:16px;color:#ffd700;">+${data.target_price} 🪙</div>
+                    <div style="color:#6a7a8e;font-size:14px;">Шанс: ${data.chance}% | Ролл: ${data.roll}%</div>
+                    <button class="case-btn primary" onclick="closeModal();loadBalance();loadInventory();loadUpgradeItems();">✅ ОК</button>
+                </div>
+            `);
+        } else if (data.success && !data.upgraded) {
+            showModal('💔 АПГРЕЙД НЕ УДАЛСЯ', `
+                <div style="text-align:center;padding:10px 0;">
+                    <div style="font-size:48px;margin:10px 0;">💔</div>
+                    <div style="font-size:18px;font-weight:700;color:#ff4444;">Предмет сгорел!</div>
+                    <div style="color:#6a7a8e;font-size:14px;">Шанс: ${data.chance}% | Ролл: ${data.roll}%</div>
+                    <button class="case-btn primary" onclick="closeModal();loadBalance();loadInventory();loadUpgradeItems();">✅ ОК</button>
+                </div>
+            `);
+        } else {
+            showModal('❌ ОШИБКА', data.error || 'Не удалось выполнить апгрейд');
+        }
+        loadBalance();
+    })
+    .catch(() => {
+        btn.disabled = false;
+        btn.textContent = '⬆️ АПГРЕЙД';
+        showModal('❌ ОШИБКА', 'Ошибка соединения');
+    });
+}
+
+// ============ АДМИН-ПАНЕЛЬ (С ПАРОЛЕМ) ============
+function loadAdminPanel() {
     const content = document.getElementById('adminContent');
     if (!content) return;
+    
+    const adminAccess = sessionStorage.getItem('adminAccess') === 'true';
+    
+    if (!adminAccess) {
+        content.innerHTML = `
+            <div style="text-align:center;padding:20px 0;">
+                <div style="font-size:48px;margin:10px 0;">🔐</div>
+                <div style="font-size:18px;font-weight:700;color:#00d4ff;">ВХОД В АДМИН-ПАНЕЛЬ</div>
+                <div style="color:#6a7a8e;font-size:14px;padding:8px 0;">Введите пароль для доступа</div>
+                <input type="password" id="adminPasswordInput" placeholder="Введите пароль" 
+                    style="width:100%;padding:14px;border:2px solid #00d4ff;border-radius:12px;font-size:16px;
+                    margin:10px 0;background:rgba(0,0,0,0.3);color:#fff;text-align:center;">
+                <button class="case-btn primary" onclick="verifyAdminPassword()">🔓 ВОЙТИ</button>
+                <div id="adminLoginError" style="color:#ff4444;font-size:14px;padding:8px 0;display:none;"></div>
+            </div>
+        `;
+        return;
+    }
+    
+    showAdminPanelContent(content);
+}
+
+function verifyAdminPassword() {
+    const input = document.getElementById('adminPasswordInput');
+    const error = document.getElementById('adminLoginError');
+    
+    if (!input || !input.value) {
+        error.textContent = '❌ Введите пароль';
+        error.style.display = 'block';
+        return;
+    }
+    
+    error.style.display = 'none';
+    
+    fetch('/api/admin_verify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            user_id: userId,
+            password: input.value
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            sessionStorage.setItem('adminAccess', 'true');
+            showModal('✅ ДОСТУП РАЗРЕШЁН!', data.message);
+            loadAdminPanel();
+        } else {
+            error.textContent = '❌ ' + data.error;
+            error.style.display = 'block';
+        }
+    })
+    .catch(() => {
+        error.textContent = '❌ Ошибка соединения';
+        error.style.display = 'block';
+    });
+}
+
+function showAdminPanelContent(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:20px;">
             <button class="case-btn" onclick="adminUsers()">👥 Список игроков</button>
@@ -1339,13 +1925,59 @@ function loadAdminPanel() {
             <button class="case-btn" onclick="adminExportCSV()">📁 Экспорт CSV</button>
             <button class="case-btn" onclick="adminResetTradeLink()">🔗 Сброс трейд-ссылки</button>
             <button class="case-btn" onclick="adminRestart()">🔁 Перезагрузить сервер</button>
+            <button class="case-btn" onclick="adminChangePassword()">🔑 Сменить пароль</button>
+            <button class="case-btn" onclick="sessionStorage.removeItem('adminAccess');loadAdminPanel();">🚪 Выйти из админки</button>
         </div>
         <div id="adminInfo" style="margin-top:12px;color:#6a7a8e;font-size:13px;max-height:400px;overflow-y:auto;"></div>
     `;
 }
 
-// ============ АДМИН-ФУНКЦИИ ============
+function adminChangePassword() {
+    showModal('🔑 СМЕНА ПАРОЛЯ', `
+        <div style="padding:10px 0;">
+            <div style="color:#6a7a8e;font-size:14px;padding:4px 0;">Старый пароль</div>
+            <input type="password" id="oldPassInput" placeholder="Введите старый пароль" 
+                style="width:100%;padding:12px;border:2px solid #00d4ff;border-radius:12px;font-size:14px;margin:6px 0;background:rgba(0,0,0,0.3);color:#fff;">
+            <div style="color:#6a7a8e;font-size:14px;padding:4px 0;">Новый пароль</div>
+            <input type="password" id="newPassInput" placeholder="Введите новый пароль" 
+                style="width:100%;padding:12px;border:2px solid #00d4ff;border-radius:12px;font-size:14px;margin:6px 0;background:rgba(0,0,0,0.3);color:#fff;">
+            <button class="case-btn primary" onclick="submitPasswordChange()">🔑 СМЕНИТЬ</button>
+            <button class="case-btn" onclick="closeModal()">❌ ОТМЕНА</button>
+        </div>
+    `);
+}
 
+function submitPasswordChange() {
+    const oldPass = document.getElementById('oldPassInput');
+    const newPass = document.getElementById('newPassInput');
+    
+    if (!oldPass || !oldPass.value || !newPass || !newPass.value) {
+        showModal('❌ ОШИБКА', 'Заполните оба поля');
+        return;
+    }
+    
+    fetch('/api/admin_change_password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            user_id: userId,
+            old_password: oldPass.value,
+            new_password: newPass.value
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            closeModal();
+            showModal('✅ ПАРОЛЬ ИЗМЕНЁН!', data.message);
+        } else {
+            showModal('❌ ОШИБКА', data.error);
+        }
+    })
+    .catch(() => showModal('❌ ОШИБКА', 'Ошибка соединения'));
+}
+
+// ============ АДМИН-ФУНКЦИИ ============
 function adminUsers() {
     fetch('/api/admin/users')
     .then(res => res.json())
