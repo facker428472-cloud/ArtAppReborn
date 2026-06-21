@@ -16,14 +16,10 @@ let dailyRewardClaimed = false;
 let dailyRewardDay = 0;
 let termsTimer = 10;
 let termsInterval = null;
-
-// ============ АПГРЕЙД ============
 let selectedSource = null;
 let selectedTarget = null;
 let upgradeItems = [];
-
-// ============ ДРУЗЬЯ ============
-let friendSearchResults = [];
+let isFirstLaunch = false;
 
 // ============ ПЕРЕВОДЫ ============
 const LANG = {
@@ -185,7 +181,7 @@ const TERMS_TEXT = `
 <div class="text">Канал: @ARTCSSKINS</div>
 <div class="text">Поддержка: @ArtCSbotSupp</div>
 <div style="margin-top:15px;padding:12px;background:rgba(255,0,0,0.05);border-radius:8px;border:1px solid rgba(255,0,0,0.15);color:#ff6b6b;font-weight:700;text-align:center;">
-⚠️ НАРУШЕНИЕ ЛЮБОГО ПУНКТА ВЛЕЧЁТ ЗА СОБОЙ ОТВЕТСТВЕННОСТЬ, ВПЛОТЬ ДО УДАЛЕНИЯ АККАУНТА.
+⚠️ НАРУШЕНИЕ ЛЮБОГО ПУНКТА ВЛЕЧЁТ ЗА СОБОЙ ОТВЕТСТВЕННОСТЬ, ВПЛОТЬ ДО УДАЛЕНИЯ АКАУНТА.
 </div>
 <div style="text-align:center;color:#6a7a8e;font-size:12px;margin-top:10px;">Дата последнего обновления: 20.06.2026</div>
 `;
@@ -328,6 +324,9 @@ function loginOrRegister(uid, uname) {
             checkDailyReward();
             checkWithdrawStatus();
             
+            // === ЗАПУСКАЕМ ОБУЧЕНИЕ ===
+            setTimeout(() => startOnboarding(), 1500);
+            
             // Обновляем онлайн-статус каждые 30 секунд
             setInterval(updateOnlineStatus, 30000);
         } else {
@@ -369,6 +368,8 @@ function loadUserAvatar() {
         ctx.fillText(firstLetter, 50, 55);
         
         avatarImg.src = canvas.toDataURL('image/png');
+    } else {
+        avatarImg.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%2300d4ff"/%3E%3Ctext x="50" y="50" font-size="40" text-anchor="middle" dominant-baseline="central" fill="white" font-family="Arial"%3E👤%3C/text%3E%3C/svg%3E';
     }
 }
 
@@ -468,10 +469,103 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// ============ АНИМАЦИИ КЕЙСОВ И КОЛЕСА (с плавным замедлением) ============
+// ============ ОБУЧЕНИЕ (ОНБОРДИНГ) ============
+
+function startOnboarding() {
+    const onboarded = localStorage.getItem('artdrop_onboarded');
+    if (onboarded === 'true') return;
+    
+    // Не показываем обучение, если уже есть модалка
+    const modal = document.getElementById('modal');
+    if (modal && modal.classList.contains('active')) return;
+    
+    showOnboardingStep(1);
+}
+
+function showOnboardingStep(step) {
+    const steps = [
+        {
+            title: '👋 ДОБРО ПОЖАЛОВАТЬ!',
+            content: 'Это ArtDrop — лучший кейс-открыватор в Telegram!\n\nЗдесь ты можешь открывать кейсы, получать скины, участвовать в PVP и многое другое!',
+            btn: '➡️ ДАЛЕЕ'
+        },
+        {
+            title: '🪙 КАК ЗАРАБОТАТЬ?',
+            content: '• Открывай кейсы → получай скины\n• Продавай скины → получай монеты\n• Крути колесо → выигрывай бонусы\n• Забирай ежедневную награду\n• Приглашай друзей → получай бонусы!',
+            btn: '➡️ ДАЛЕЕ'
+        },
+        {
+            title: '🎁 КАК ОТКРЫВАТЬ КЕЙСЫ?',
+            content: 'Выбери кейс на главном экране, нажми "Открыть" и смотри анимацию!\n\nЧем дороже кейс — тем круче скины могут выпасть!',
+            btn: '➡️ ДАЛЕЕ'
+        },
+        {
+            title: '📦 ЧТО ДЕЛАТЬ СО СКИНАМИ?',
+            content: '• Продать → получить монеты\n• Вывести → получить скин на аккаунт\n• Апгрейдить → рискнуть и получить более дорогой скин!',
+            btn: '➡️ ДАЛЕЕ'
+        },
+        {
+            title: '👥 ДРУЗЬЯ И ТОП',
+            content: 'Добавляй друзей, смотри их инвентарь и статус онлайн.\n\nСоревнуйся в ТОПе игроков по монетам, рефералам и предметам!',
+            btn: '➡️ ДАЛЕЕ'
+        },
+        {
+            title: '⬆️ АПГРЕЙД',
+            content: 'Выбери предмет → выбери цель → смотри шанс!\n\nЕсли повезёт — получишь дорогой скин. Если нет — предмет сгорает. Рискни!',
+            btn: '➡️ ДАЛЕЕ'
+        },
+        {
+            title: '🏆 ДОСТИЖЕНИЯ',
+            content: 'За выполнение целей ты получаешь награды!\n\n50 достижений ждут тебя — становись легендой ArtDrop!',
+            btn: '✅ НАЧАТЬ ИГРУ!'
+        }
+    ];
+    
+    const skipBtn = step < steps.length ? 
+        `<button class="case-btn" onclick="skipOnboarding()" style="margin-top:8px;background:rgba(255,255,255,0.05);">⏭️ ПРОПУСТИТЬ</button>` : '';
+    
+    showModal(steps[step-1].title, `
+        <div style="text-align:center;padding:10px 0;">
+            <div style="font-size:16px;color:#c0c0c0;line-height:1.8;text-align:left;white-space:pre-wrap;padding:8px 0;">${steps[step-1].content}</div>
+            <button class="case-btn primary" onclick="nextOnboardingStep(${step})" style="margin-top:8px;">${steps[step-1].btn}</button>
+            ${skipBtn}
+        </div>
+    `);
+}
+
+function nextOnboardingStep(step) {
+    const totalSteps = 7;
+    if (step >= totalSteps) {
+        finishOnboarding();
+        return;
+    }
+    closeModal();
+    setTimeout(() => showOnboardingStep(step + 1), 300);
+}
+
+function skipOnboarding() {
+    closeModal();
+    finishOnboarding();
+}
+
+function finishOnboarding() {
+    localStorage.setItem('artdrop_onboarded', 'true');
+    showModal('🎉 ГОТОВО!', `
+        <div style="text-align:center;padding:10px 0;">
+            <div style="font-size:40px;margin:10px 0;">🚀</div>
+            <div style="font-size:20px;font-weight:700;color:#00d4ff;">Ты готов к игре!</div>
+            <div style="color:#6a7a8e;font-size:14px;padding:8px 0;">Открывай кейсы, собирай скины и становись лучшим!</div>
+            <button class="case-btn primary" onclick="closeModal()">✅ НАЧАТЬ!</button>
+        </div>
+    `);
+}
+
+// ============ АНИМАЦИИ КЕЙСОВ (ПЛАВНЫЕ + СИНХРОНИЗАЦИЯ) ============
 class CaseAnimation {
-    constructor(caseName, callback) {
+    constructor(caseName, realItem, realPrice, callback) {
         this.caseName = caseName;
+        this.realItem = realItem;
+        this.realPrice = realPrice;
         this.callback = callback;
         this.skins = this.getCaseSkins();
         this.currentIndex = 0;
@@ -549,7 +643,9 @@ class CaseAnimation {
     nextSkin() {
         if (!this.isSpinning) return;
         
+        this.currentSkinLabel.style.transition = 'opacity 0.15s ease';
         this.currentSkinLabel.style.opacity = '0';
+        
         setTimeout(() => {
             const name = this.skins[this.currentIndex % this.skins.length][0];
             const price = this.skins[this.currentIndex % this.skins.length][1];
@@ -558,11 +654,11 @@ class CaseAnimation {
             this.currentSkinLabel.textContent = name;
             this.currentPriceLabel.textContent = price + ' 🪙';
             this.currentSkinLabel.style.opacity = '1';
-        }, 50);
+        }, 150);
         
         const progress = Math.min(this.currentIndex / this.stopAt, 1);
-        const easeOut = (t) => 1 - Math.pow(1 - t, 3);
-        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOut(progress);
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOutCubic(progress);
         
         for (let i = 0; i < this.skinElements.length; i++) {
             const el = this.skinElements[i];
@@ -587,19 +683,33 @@ class CaseAnimation {
     }
     
     finish() {
-        this.currentSkinLabel.style.color = '#00d4ff';
+        // === ПОДМЕНЯЕМ НА РЕАЛЬНЫЙ РЕЗУЛЬТАТ ===
+        this.currentSkinLabel.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        this.currentSkinLabel.textContent = this.realItem;
+        this.currentSkinLabel.style.color = '#ffd700';
+        this.currentSkinLabel.style.fontSize = '42px';
+        this.currentPriceLabel.textContent = this.realPrice + ' 🪙';
         this.currentPriceLabel.style.color = '#ffd700';
-        this.currentSkinLabel.style.fontSize = '36px';
+        this.currentPriceLabel.style.fontSize = '24px';
+        
+        this.indicator.style.transition = 'opacity 0.5s ease';
         this.indicator.style.opacity = '0';
+        
         setTimeout(() => {
-            this.overlay.remove();
-            if (this.callback) this.callback(this.resultItem, this.resultPrice);
-        }, 1500);
+            this.overlay.style.transition = 'opacity 0.4s ease';
+            this.overlay.style.opacity = '0';
+            setTimeout(() => {
+                this.overlay.remove();
+                if (this.callback) this.callback(this.realItem, this.realPrice);
+            }, 400);
+        }, 1200);
     }
 }
 
+// ============ АНИМАЦИЯ КОЛЕСА (СИНХРОНИЗАЦИЯ) ============
 class WheelAnimation {
-    constructor(callback) {
+    constructor(realPrize, callback) {
+        this.realPrize = realPrize;
         this.callback = callback;
         this.prizes = [
             ["50 🪙", 50, "coins"], ["100 🪙", 100, "coins"],
@@ -654,15 +764,21 @@ class WheelAnimation {
     nextPrize() {
         if (!this.isSpinning) return;
         
-        const name = this.prizes[this.currentIndex % this.prizes.length][0];
-        const value = this.prizes[this.currentIndex % this.prizes.length][1];
-        const type = this.prizes[this.currentIndex % this.prizes.length][2];
-        this.result = {name, value, type};
-        this.currentPrizeLabel.textContent = name;
+        this.currentPrizeLabel.style.transition = 'opacity 0.15s ease';
+        this.currentPrizeLabel.style.opacity = '0';
+        
+        setTimeout(() => {
+            const name = this.prizes[this.currentIndex % this.prizes.length][0];
+            const value = this.prizes[this.currentIndex % this.prizes.length][1];
+            const type = this.prizes[this.currentIndex % this.prizes.length][2];
+            this.result = {name, value, type};
+            this.currentPrizeLabel.textContent = name;
+            this.currentPrizeLabel.style.opacity = '1';
+        }, 150);
         
         const progress = Math.min(this.currentIndex / this.stopAt, 1);
-        const easeOut = (t) => 1 - Math.pow(1 - t, 3);
-        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOut(progress);
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOutCubic(progress);
         
         for (let i = 0; i < this.prizeElements.length; i++) {
             const el = this.prizeElements[i];
@@ -686,13 +802,75 @@ class WheelAnimation {
     }
     
     finish() {
+        // === ПОДМЕНЯЕМ НА РЕАЛЬНЫЙ РЕЗУЛЬТАТ ===
+        let displayName = this.realPrize.name || this.realPrize;
+        this.currentPrizeLabel.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        this.currentPrizeLabel.textContent = displayName;
         this.currentPrizeLabel.style.color = '#ffd700';
-        this.currentPrizeLabel.style.fontSize = '40px';
+        this.currentPrizeLabel.style.fontSize = '44px';
+        
+        this.indicator.style.transition = 'opacity 0.5s ease';
         this.indicator.style.opacity = '0';
+        
         setTimeout(() => {
-            this.overlay.remove();
-            if (this.callback) this.callback(this.result);
-        }, 1500);
+            this.overlay.style.transition = 'opacity 0.4s ease';
+            this.overlay.style.opacity = '0';
+            setTimeout(() => {
+                this.overlay.remove();
+                if (this.callback) this.callback(this.realPrize);
+            }, 400);
+        }, 1200);
+    }
+}
+
+// ============ АНИМАЦИЯ АПГРЕЙДА ============
+class UpgradeAnimation {
+    constructor(success, callback) {
+        this.success = success;
+        this.callback = callback;
+        this.createUI();
+    }
+    
+    createUI() {
+        this.overlay = document.createElement('div');
+        this.overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;';
+        
+        const title = document.createElement('div');
+        title.style.cssText = 'color:#6a7a8e;font-size:18px;font-weight:600;margin-bottom:20px;letter-spacing:2px;';
+        title.textContent = '⬆️ АПГРЕЙД';
+        this.overlay.appendChild(title);
+        
+        this.resultLabel = document.createElement('div');
+        this.resultLabel.style.cssText = 'font-size:80px;font-weight:900;text-align:center;transition:all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);text-shadow:0 0 60px rgba(0,212,255,0.3);';
+        this.resultLabel.textContent = this.success ? '⬆️' : '💔';
+        this.overlay.appendChild(this.resultLabel);
+        
+        this.statusLabel = document.createElement('div');
+        this.statusLabel.style.cssText = 'color:#ffffff;font-size:32px;font-weight:700;text-align:center;margin-top:15px;transition:all 0.5s ease;';
+        this.statusLabel.textContent = this.success ? 'UP' : 'LOSE';
+        this.overlay.appendChild(this.statusLabel);
+        
+        document.body.appendChild(this.overlay);
+        
+        // Анимация
+        setTimeout(() => {
+            this.resultLabel.style.transform = 'scale(1.5)';
+            this.resultLabel.style.color = this.success ? '#00d4ff' : '#ff4444';
+            this.resultLabel.style.textShadow = this.success ? 
+                '0 0 80px rgba(0,212,255,0.5)' : '0 0 80px rgba(255,68,68,0.5)';
+            
+            this.statusLabel.style.color = this.success ? '#00d4ff' : '#ff4444';
+            this.statusLabel.style.fontSize = '48px';
+        }, 300);
+        
+        setTimeout(() => {
+            this.overlay.style.transition = 'opacity 0.5s ease';
+            this.overlay.style.opacity = '0';
+            setTimeout(() => {
+                this.overlay.remove();
+                if (this.callback) this.callback();
+            }, 500);
+        }, 2000);
     }
 }
 
@@ -834,6 +1012,7 @@ function loadCases() {
 
 function openCase(caseName, price) {
     if (tg) tg.HapticFeedback.impactOccurred('medium');
+    
     fetch(`/api/miniapp_profile?user_id=${userId}`)
     .then(res => res.json())
     .then(data => {
@@ -845,6 +1024,7 @@ function openCase(caseName, price) {
             showModal('❌ ОШИБКА', `Нужно ${price} 🪙, у вас ${data.coins}`);
             return;
         }
+        
         fetch('/api/miniapp_open_case', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -853,13 +1033,16 @@ function openCase(caseName, price) {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                const anim = new CaseAnimation(caseName, (item, price) => {
+                const realItem = data.item;
+                const realPrice = data.price;
+                
+                const anim = new CaseAnimation(caseName, realItem, realPrice, (item, price) => {
                     showModal('🎉 УСПЕХ!', `
                         <div style="text-align:center;padding:10px 0;">
                             <div style="font-size:40px;margin:10px 0;">🎉</div>
                             <div style="font-size:20px;font-weight:700;color:#00d4ff;">ВЫПАЛО!</div>
                             <div style="font-size:18px;font-weight:600;padding:8px 0;">${item}</div>
-                            <div style="font-size:16px;color:#ffd700;">+${price} 🪙</div>
+                            <div style="font-size:16px;color:#ffd700;">${price} 🪙</div>
                             <div style="display:flex;gap:10px;margin-top:16px;">
                                 <button class="case-btn" onclick="closeModal();openCase('${caseName}',${price})" style="flex:1;background:rgba(0,212,255,0.15);">🔄 ЕЩЁ</button>
                                 <button class="case-btn primary" onclick="closeModal();loadInventory();loadBalance();" style="flex:1;">✅ ОК</button>
@@ -1074,6 +1257,7 @@ function loadProfile() {
                 <button class="case-btn" onclick="showReferral()">🔗 РЕФЕРАЛЬНАЯ ССЫЛКА</button>
                 <button class="case-btn" onclick="showSupport()">🆘 ПОДДЕРЖКА</button>
                 <button class="case-btn" onclick="showLanguageSettings()">🌐 ЯЗЫК</button>
+                <button class="case-btn" onclick="showTerms()">📜 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ</button>
                 <button class="case-btn" onclick="logout()">🚪 ВЫХОД</button>
             </div>
         `;
@@ -1086,6 +1270,15 @@ function loadProfile() {
         console.error('Profile error:', err);
         content.innerHTML = '<div style="text-align:center;color:#ff4444;">❌ Ошибка соединения</div>';
     });
+}
+
+function showTerms() {
+    showModal('📜 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ', `
+        <div style="max-height:400px;overflow-y:auto;padding:10px 0;font-size:13px;color:#c0c0c0;line-height:1.8;text-align:left;">
+            ${TERMS_TEXT}
+        </div>
+        <button class="case-btn primary" onclick="closeModal()" style="margin-top:10px;">✅ ЗАКРЫТЬ</button>
+    `);
 }
 
 // ============ ЯЗЫК ============
@@ -1175,7 +1368,9 @@ function spinWheel() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            new WheelAnimation((result) => {
+            const realPrize = data.result;
+            
+            new WheelAnimation(realPrize, (result) => {
                 let msg = '';
                 if (result.type === 'coins') msg = `🎉 Вы выиграли ${result.value} 🪙!`;
                 else if (result.type === 'discount') msg = `🎉 Вы выиграли ${result.value}% скидку!`;
@@ -1309,12 +1504,14 @@ function loadTopPlayers() {
     .then(res => res.json())
     .then(data => {
         let html = '';
+        
         if (data.top && data.top.length > 0) {
             data.top.forEach((p, index) => {
-                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${p.place}.`;
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index+1}.`;
+                const isYou = p.id == userId;
                 html += `
-                    <div class="inventory-item" style="${p.id == userId ? 'border-color:#00d4ff;background:rgba(0,212,255,0.05);' : ''}">
-                        <span><strong>${medal}</strong> ${p.username}</span>
+                    <div class="inventory-item" style="${isYou ? 'border-color:#ffd700;background:rgba(255,215,0,0.05);' : ''}">
+                        <span><strong>${medal}</strong> ${p.username} ${isYou ? '👈' : ''}</span>
                         <span>🪙 ${p.coins}</span>
                         <span>👥 ${p.referrals}</span>
                         <span>📦 ${p.items}</span>
@@ -1327,19 +1524,22 @@ function loadTopPlayers() {
         }
         list.innerHTML = html;
         
-        if (data.user) {
+        if (data.user && data.user.place > 0) {
+            const u = data.user;
             userPlace.innerHTML = `
-                <div style="font-weight:700;color:#00d4ff;padding:8px 0;">📍 ТВОЁ МЕСТО</div>
+                <div style="font-weight:700;color:#ffd700;padding:8px 0;">📍 ТВОЁ МЕСТО: #${u.place}</div>
                 <div class="inventory-item" style="border-color:#ffd700;background:rgba(255,215,0,0.05);">
-                    <span><strong>#${data.user.place}</strong> ${data.user.username}</span>
-                    <span>🪙 ${data.user.coins}</span>
-                    <span>👥 ${data.user.referrals}</span>
-                    <span>📦 ${data.user.items}</span>
-                    <span>💳 ${data.user.deposit} RUB</span>
+                    <span><strong>${u.username}</strong></span>
+                    <span>🪙 ${u.coins}</span>
+                    <span>👥 ${u.referrals}</span>
+                    <span>📦 ${u.items}</span>
+                    <span>💳 ${u.deposit} RUB</span>
                 </div>
             `;
+        } else if (data.user) {
+            userPlace.innerHTML = `<div style="text-align:center;color:#6a7a8e;padding:8px 0;">⚠️ Ты ещё не в рейтинге</div>`;
         } else {
-            userPlace.innerHTML = '<div style="text-align:center;color:#6a7a8e;padding:8px 0;">⚠️ Вы не в рейтинге</div>';
+            userPlace.innerHTML = `<div style="text-align:center;color:#6a7a8e;padding:8px 0;">⚠️ Ты ещё не в рейтинге</div>`;
         }
     })
     .catch(() => {
@@ -1461,7 +1661,6 @@ function loadFriends() {
     fetch(`/api/get_friends?user_id=${userId}`)
     .then(res => res.json())
     .then(data => {
-        // Друзья
         if (data.friends && data.friends.length > 0) {
             let html = '';
             data.friends.forEach(f => {
@@ -1481,7 +1680,6 @@ function loadFriends() {
             list.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">👥 Нет друзей. Добавьте кого-нибудь!</div>';
         }
         
-        // Заявки
         if (data.requests && data.requests.length > 0) {
             let html = '';
             data.requests.forEach(r => {
@@ -1619,7 +1817,6 @@ function loadUpgradeItems() {
         }
     });
     
-    // Сбрасываем выбор
     selectedSource = null;
     selectedTarget = null;
     document.getElementById('sourceSlot').innerHTML = '<div style="color:#6a7a8e;font-size:14px;">Выберите предмет</div>';
@@ -1773,29 +1970,37 @@ function executeUpgrade() {
         btn.disabled = false;
         btn.textContent = '⬆️ АПГРЕЙД';
         
-        if (data.success && data.upgraded) {
-            showModal('🎉 АПГРЕЙД УСПЕШЕН!', `
-                <div style="text-align:center;padding:10px 0;">
-                    <div style="font-size:48px;margin:10px 0;">🎉</div>
-                    <div style="font-size:20px;font-weight:700;color:#00d4ff;">${data.target_name}</div>
-                    <div style="font-size:16px;color:#ffd700;">+${data.target_price} 🪙</div>
-                    <div style="color:#6a7a8e;font-size:14px;">Шанс: ${data.chance}% | Ролл: ${data.roll}%</div>
-                    <button class="case-btn primary" onclick="closeModal();loadBalance();loadInventory();loadUpgradeItems();">✅ ОК</button>
-                </div>
-            `);
-        } else if (data.success && !data.upgraded) {
-            showModal('💔 АПГРЕЙД НЕ УДАЛСЯ', `
-                <div style="text-align:center;padding:10px 0;">
-                    <div style="font-size:48px;margin:10px 0;">💔</div>
-                    <div style="font-size:18px;font-weight:700;color:#ff4444;">Предмет сгорел!</div>
-                    <div style="color:#6a7a8e;font-size:14px;">Шанс: ${data.chance}% | Ролл: ${data.roll}%</div>
-                    <button class="case-btn primary" onclick="closeModal();loadBalance();loadInventory();loadUpgradeItems();">✅ ОК</button>
-                </div>
-            `);
+        if (data.success) {
+            const success = data.upgraded;
+            
+            // === АНИМАЦИЯ АПГРЕЙДА ===
+            new UpgradeAnimation(success, () => {
+                if (success) {
+                    showModal('🎉 АПГРЕЙД УСПЕШЕН!', `
+                        <div style="text-align:center;padding:10px 0;">
+                            <div style="font-size:48px;margin:10px 0;">🎉</div>
+                            <div style="font-size:20px;font-weight:700;color:#00d4ff;">${data.target_name}</div>
+                            <div style="font-size:16px;color:#ffd700;">+${data.target_price} 🪙</div>
+                            <div style="color:#6a7a8e;font-size:14px;">Шанс: ${data.chance}% | Ролл: ${data.roll}%</div>
+                            <button class="case-btn primary" onclick="closeModal();loadBalance();loadInventory();loadUpgradeItems();">✅ ОК</button>
+                        </div>
+                    `);
+                } else {
+                    showModal('💔 АПГРЕЙД НЕ УДАЛСЯ', `
+                        <div style="text-align:center;padding:10px 0;">
+                            <div style="font-size:48px;margin:10px 0;">💔</div>
+                            <div style="font-size:18px;font-weight:700;color:#ff4444;">Предмет сгорел!</div>
+                            <div style="color:#6a7a8e;font-size:14px;">Шанс: ${data.chance}% | Ролл: ${data.roll}%</div>
+                            <button class="case-btn primary" onclick="closeModal();loadBalance();loadInventory();loadUpgradeItems();">✅ ОК</button>
+                        </div>
+                    `);
+                }
+                loadBalance();
+            });
         } else {
             showModal('❌ ОШИБКА', data.error || 'Не удалось выполнить апгрейд');
+            loadBalance();
         }
-        loadBalance();
     })
     .catch(() => {
         btn.disabled = false;
