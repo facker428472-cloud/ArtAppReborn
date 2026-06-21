@@ -370,7 +370,6 @@ def init_db():
             value TEXT
         )''')
         
-        # НОВЫЕ ТАБЛИЦЫ
         c.execute('''CREATE TABLE IF NOT EXISTS user_achievements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -423,7 +422,8 @@ def serve_js(filename):
 def index():
     return render_template('index.html')
 
-# ============ ТВОИ СТАРЫЕ API ============
+# ============ API ============
+
 @app.route('/api/miniapp_login', methods=['POST'])
 def miniapp_login():
     try:
@@ -492,6 +492,12 @@ def miniapp_profile():
             return jsonify({"error": "No user_id"}), 400
         with db_pool.get_connection() as conn:
             c = conn.cursor()
+            
+            # === АВТОРАЗМОРОЗКА ===
+            user_check = c.execute("SELECT coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
+            if user_check and user_check[1] == 1 and user_check[0] >= 0:
+                c.execute("UPDATE users SET is_frozen=0 WHERE id=?", (user_id,))
+            
             c.execute("SELECT id, username, coins, level, exp, pvp_wins, pvp_losses, wheel_spins, is_admin, total_deposit, is_frozen, daily_reward_day, daily_reward_last, subscribed_reward FROM users WHERE id=?", (user_id,))
             user = c.fetchone()
             if user:
@@ -671,11 +677,15 @@ def withdraw_request():
         trade_link = data.get('trade_link')
         with db_pool.get_connection() as conn:
             c = conn.cursor()
-            user = c.execute("SELECT username, coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
+            user = c.execute("SELECT username, coins, is_frozen, total_deposit FROM users WHERE id=?", (user_id,)).fetchone()
             if not user:
                 return jsonify({"error": "User not found"}), 404
             if user[2] == 1:
                 return jsonify({"error": "Account frozen"}), 400
+            
+            if user[3] < 115:
+                return jsonify({"error": "❌ Вывод доступен только при пополнении от 115 RUB"}), 400
+            
             item = c.execute("SELECT item_name, item_price FROM inventory WHERE id=? AND user_id=?", (item_id, user_id)).fetchone()
             if not item:
                 return jsonify({"error": "Предмет не найден"}), 404
@@ -849,7 +859,6 @@ def get_achievements():
             
             achievements = []
             
-            # 1-10: Монеты
             coin_targets = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 5000000]
             for i, target in enumerate(coin_targets, 1):
                 done = coins >= target
@@ -866,7 +875,6 @@ def get_achievements():
                     c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
                               (user_id, i, datetime.now().isoformat()))
             
-            # 11-20: Уровни
             level_targets = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100]
             for i, target in enumerate(level_targets, 1):
                 ach_id = i + 10
@@ -884,7 +892,6 @@ def get_achievements():
                     c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
                               (user_id, ach_id, datetime.now().isoformat()))
             
-            # 21-30: Победы PVP
             win_targets = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
             for i, target in enumerate(win_targets, 1):
                 ach_id = i + 20
@@ -902,7 +909,6 @@ def get_achievements():
                     c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
                               (user_id, ach_id, datetime.now().isoformat()))
             
-            # 31-40: Предметы
             item_targets = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
             for i, target in enumerate(item_targets, 1):
                 ach_id = i + 30
@@ -920,7 +926,6 @@ def get_achievements():
                     c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
                               (user_id, ach_id, datetime.now().isoformat()))
             
-            # 41-50: Рефералы
             ref_targets = [1, 3, 5, 10, 25, 50, 100, 250, 500, 1000]
             for i, target in enumerate(ref_targets, 1):
                 ach_id = i + 40
@@ -1331,8 +1336,7 @@ def admin_change_password():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ============ ТВОИ СТАРЫЕ АДМИН-ФУНКЦИИ ============
-
+# ============ АДМИН-ФУНКЦИИ ============
 @app.route('/api/admin/users', methods=['GET'])
 def admin_users():
     with db_pool.get_connection() as conn:
