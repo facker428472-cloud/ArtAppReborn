@@ -19,7 +19,17 @@ let termsInterval = null;
 let selectedSource = null;
 let selectedTarget = null;
 let upgradeItems = [];
-let isFirstLaunch = false;
+let toastContainer = null;
+
+// ============ ПЕРЕМЕННЫЕ ДЛЯ ИНВЕНТАРЯ ============
+let selectedItems = new Set();
+let selectMode = false;
+
+// ============ ПЕРЕМЕННЫЕ ДЛЯ ОБУЧЕНИЯ ============
+let tutorialStep = 0;
+let tutorialActive = false;
+let tutorialItems = [];
+let tutorialCaseOpened = false;
 
 // ============ ПЕРЕВОДЫ ============
 const LANG = {
@@ -181,7 +191,7 @@ const TERMS_TEXT = `
 <div class="text">Канал: @ARTCSSKINS</div>
 <div class="text">Поддержка: @ArtCSbotSupp</div>
 <div style="margin-top:15px;padding:12px;background:rgba(255,0,0,0.05);border-radius:8px;border:1px solid rgba(255,0,0,0.15);color:#ff6b6b;font-weight:700;text-align:center;">
-⚠️ НАРУШЕНИЕ ЛЮБОГО ПУНКТА ВЛЕЧЁТ ЗА СОБОЙ ОТВЕТСТВЕННОСТЬ, ВПЛОТЬ ДО УДАЛЕНИЯ АКАУНТА.
+⚠️ НАРУШЕНИЕ ЛЮБОГО ПУНКТА ВЛЕЧЁТ ЗА СОБОЙ ОТВЕТСТВЕННОСТЬ, ВПЛОТЬ ДО УДАЛЕНИЯ АККАУНТА.
 </div>
 <div style="text-align:center;color:#6a7a8e;font-size:12px;margin-top:10px;">Дата последнего обновления: 20.06.2026</div>
 `;
@@ -236,16 +246,28 @@ function acceptTerms() {
         return;
     }
     
+    const neverShow = document.getElementById('termsNeverShow');
+    if (neverShow && neverShow.checked) {
+        localStorage.setItem('artdrop_terms_hidden', 'true');
+    }
+    
     localStorage.setItem('terms_accepted', 'true');
+    if (termsInterval) clearInterval(termsInterval);
+    
+    showMainScreen();
+}
+
+function showMainScreen() {
     const termsScreen = document.getElementById('terms-screen');
     const mainScreen = document.getElementById('main-screen');
-    if (termsScreen) termsScreen.style.display = 'none';
+    if (termsScreen) {
+        termsScreen.style.display = 'none';
+        termsScreen.classList.remove('active');
+    }
     if (mainScreen) {
         mainScreen.style.display = 'block';
         mainScreen.classList.add('active');
     }
-    
-    if (termsInterval) clearInterval(termsInterval);
 }
 
 // ============ ИНИЦИАЛИЗАЦИЯ ============
@@ -253,12 +275,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const termsContent = document.getElementById('termsContent');
     if (termsContent) termsContent.innerHTML = TERMS_TEXT;
     
+    const checkboxContainer = document.querySelector('.terms-checkbox');
+    if (checkboxContainer) {
+        const neverShowDiv = document.createElement('div');
+        neverShowDiv.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 0;margin-top:5px;';
+        neverShowDiv.innerHTML = `
+            <input type="checkbox" id="termsNeverShow" style="width:20px;height:20px;accent-color:#00d4ff;cursor:pointer;">
+            <label for="termsNeverShow" style="color:#c0c0c0;font-size:14px;cursor:pointer;">Никогда больше не показывать</label>
+        `;
+        checkboxContainer.after(neverShowDiv);
+    }
+    
+    const termsHidden = localStorage.getItem('artdrop_terms_hidden');
     const accepted = localStorage.getItem('terms_accepted');
+    
     const termsScreen = document.getElementById('terms-screen');
     const mainScreen = document.getElementById('main-screen');
     
-    if (accepted) {
-        if (termsScreen) termsScreen.style.display = 'none';
+    if (termsHidden === 'true' || accepted) {
+        if (termsScreen) {
+            termsScreen.style.display = 'none';
+            termsScreen.classList.remove('active');
+        }
         if (mainScreen) {
             mainScreen.style.display = 'block';
             mainScreen.classList.add('active');
@@ -323,12 +361,11 @@ function loginOrRegister(uid, uname) {
             loadBalance();
             checkDailyReward();
             checkWithdrawStatus();
+            checkNotifications();
             
-            // === ЗАПУСКАЕМ ОБУЧЕНИЕ ===
-            setTimeout(() => startOnboarding(), 1500);
-            
-            // Обновляем онлайн-статус каждые 30 секунд
+            setTimeout(() => startTutorial(), 1500);
             setInterval(updateOnlineStatus, 30000);
+            setInterval(checkNotifications, 10000);
         } else {
             console.error('Login failed:', data.error);
         }
@@ -407,6 +444,7 @@ function loadBalance() {
         console.log('Balance data:', data);
         const coins = data.coins || 0;
         const isFrozen = data.is_frozen || 0;
+        const level = data.level || 1;
         
         document.querySelectorAll('.balance span:last-child').forEach(el => {
             el.textContent = coins;
@@ -419,6 +457,12 @@ function loadBalance() {
         if (frozenWarning) {
             frozenWarning.style.display = isFrozen ? 'block' : 'none';
         }
+        
+        const currentLevel = localStorage.getItem('lastLevel');
+        if (currentLevel && parseInt(currentLevel) < level) {
+            showToast(`🎉 Новый уровень! Ты достиг ${level} уровня! 🎉`, 'success', 10000);
+        }
+        localStorage.setItem('lastLevel', level.toString());
     })
     .catch(err => console.error('Balance error:', err));
 }
@@ -469,98 +513,443 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// ============ ОБУЧЕНИЕ (ОНБОРДИНГ) ============
+// ============ СИСТЕМА УВЕДОМЛЕНИЙ (TOAST) ============
 
-function startOnboarding() {
+function showToast(message, type = 'info', duration = 10000) {
+    if (!toastContainer) {
+        const div = document.createElement('div');
+        div.id = 'toastContainer';
+        div.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:99999;width:90%;max-width:400px;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(div);
+        toastContainer = div;
+    }
+    
+    const toast = document.createElement('div');
+    
+    const colors = {
+        'success': '#00d4ff',
+        'error': '#ff4444',
+        'info': '#6a7a8e',
+        'friend_request': '#ffd700',
+        'achievement': '#ffd700',
+        'level_up': '#00d4ff'
+    };
+    
+    toast.style.cssText = `
+        background: rgba(10,10,15,0.95);
+        border: 1px solid ${colors[type] || '#6a7a8e'};
+        border-radius: 12px;
+        padding: 12px 16px;
+        color: #ffffff;
+        font-size: 14px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        transform: translateY(-30px);
+        opacity: 0;
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        max-width: 100%;
+        word-break: break-word;
+    `;
+    
+    const icons = {
+        'success': '✅',
+        'error': '❌',
+        'info': 'ℹ️',
+        'friend_request': '👥',
+        'achievement': '🏅',
+        'level_up': '⭐'
+    };
+    
+    toast.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+            <span style="font-size:20px;">${icons[type] || '📢'}</span>
+            <span style="flex:1;">${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#6a7a8e;font-size:18px;cursor:pointer;padding:0 4px;">✕</button>
+    `;
+    
+    if (type === 'friend_request' && message.includes('хочет добавить')) {
+        const friendId = message.match(/id:(\d+)/);
+        if (friendId) {
+            const id = friendId[1];
+            toast.innerHTML = `
+                <div style="display:flex;align-items:center;gap:8px;flex:1;">
+                    <span style="font-size:20px;">👥</span>
+                    <span>${message.replace(/id:\d+/, '').trim()}</span>
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="acceptFriendRequestFromToast(${id})" style="padding:4px 12px;border-radius:6px;border:none;background:#00d4ff;color:#0a0a0f;font-weight:600;cursor:pointer;font-size:13px;">✅</button>
+                    <button onclick="rejectFriendRequestFromToast(${id})" style="padding:4px 12px;border-radius:6px;border:1px solid #ff4444;background:transparent;color:#ff4444;font-weight:600;cursor:pointer;font-size:13px;">❌</button>
+                </div>
+            `;
+        }
+    }
+    
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.transform = 'translateY(0)';
+        toast.style.opacity = '1';
+    }, 10);
+    
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.transform = 'translateY(-30px)';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 500);
+        }
+    }, duration);
+}
+
+function acceptFriendRequestFromToast(friendId) {
+    fetch('/api/accept_friend', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, friend_id: friendId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('✅ Друг добавлен!', 'success', 5000);
+            loadFriends();
+            loadBalance();
+        }
+    });
+    document.querySelectorAll('#toastContainer > div').forEach(el => el.remove());
+}
+
+function rejectFriendRequestFromToast(friendId) {
+    fetch('/api/reject_friend', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, friend_id: friendId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast('❌ Заявка отклонена', 'info', 3000);
+            loadFriends();
+        }
+    });
+    document.querySelectorAll('#toastContainer > div').forEach(el => el.remove());
+}
+
+// ============ ПРОВЕРКА УВЕДОМЛЕНИЙ ============
+
+function checkNotifications() {
+    if (!userId) return;
+    
+    fetch(`/api/miniapp_profile?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.unlocked_achievement) {
+            showToast(`🏅 Ты получил достижение "${data.unlocked_achievement}" и получил ${data.achievement_reward} 🪙!`, 'achievement', 10000);
+        }
+        
+        const currentLevel = localStorage.getItem('lastLevel');
+        if (currentLevel && parseInt(currentLevel) < (data.level || 1)) {
+            showToast(`⭐ Новый уровень! Ты достиг ${data.level} уровня! +100 🪙`, 'level_up', 10000);
+        }
+        localStorage.setItem('lastLevel', (data.level || 1).toString());
+    })
+    .catch(() => {});
+}
+
+// ============ ИНТЕРАКТИВНОЕ ОБУЧЕНИЕ ============
+
+const TUTORIAL_STEPS = [
+    {
+        id: 'welcome',
+        title: '👋 ДОБРО ПОЖАЛОВАТЬ!',
+        text: 'Это ArtDrop — кейс-открыватор в Telegram!\n\nДавай я покажу тебе, как всё работает. Начнём с самого главного — с открытия кейсов!',
+        action: 'open_cases',
+        button: '🎁 ОТКРЫТЬ КЕЙСЫ',
+        target: 'cases'
+    },
+    {
+        id: 'open_case',
+        title: '🎁 ОТКРОЙ КЕЙС!',
+        text: 'Нажми на кнопку "🥫 BOMJ" — это самый дешёвый кейс. У тебя хватит монет, чтобы открыть его!',
+        action: 'click_case',
+        button: '🥫 ОТКРЫТЬ BOMJ',
+        target: 'bomj'
+    },
+    {
+        id: 'case_result',
+        title: '🎉 ТЫ ОТКРЫЛ КЕЙС!',
+        text: 'Поздравляю! Теперь у тебя есть скин. Давай посмотрим, что с ним можно сделать.',
+        action: 'go_inventory',
+        button: '📦 ПЕРЕЙТИ В ИНВЕНТАРЬ',
+        target: 'inventory'
+    },
+    {
+        id: 'sell_item',
+        title: '💰 ПРОДАЙ СКИН!',
+        text: 'Нажми кнопку "ПРОДАТЬ" рядом со скином, который ты только что получил. Так ты получишь монеты!',
+        action: 'click_sell',
+        button: '💰 ПРОДАТЬ СКИН',
+        target: 'sell'
+    },
+    {
+        id: 'go_profile',
+        title: '👤 ПРОВЕРЬ ПРОФИЛЬ!',
+        text: 'Теперь зайди в профиль — там видно твой баланс, уровень и статистику. Нажми на аватарку в правом верхнем углу!',
+        action: 'open_profile',
+        button: '👤 ОТКРЫТЬ ПРОФИЛЬ',
+        target: 'profile'
+    },
+    {
+        id: 'go_friends',
+        title: '👥 ДРУЗЬЯ',
+        text: 'В профиле есть вкладка "Друзья". Там ты можешь добавлять друзей и смотреть их инвентарь. Попробуй найти кого-нибудь!',
+        action: 'open_friends',
+        button: '👥 ОТКРЫТЬ ДРУЗЕЙ',
+        target: 'friends'
+    },
+    {
+        id: 'final',
+        title: '🎉 ТЫ ГОТОВ!',
+        text: 'Теперь ты знаешь основы ArtDrop!\n\nОстальное ты освоишь по ходу игры. Удачи! 🚀',
+        action: 'finish',
+        button: '✅ НАЧАТЬ ИГРУ!',
+        target: 'main'
+    }
+];
+
+function startTutorial() {
     const onboarded = localStorage.getItem('artdrop_onboarded');
     if (onboarded === 'true') return;
     
-    // Не показываем обучение, если уже есть модалка
-    const modal = document.getElementById('modal');
-    if (modal && modal.classList.contains('active')) return;
-    
-    showOnboardingStep(1);
+    tutorialActive = true;
+    tutorialStep = 0;
+    showTutorialStep();
 }
 
-function showOnboardingStep(step) {
-    const steps = [
-        {
-            title: '👋 ДОБРО ПОЖАЛОВАТЬ!',
-            content: 'Это ArtDrop — лучший кейс-открыватор в Telegram!\n\nЗдесь ты можешь открывать кейсы, получать скины, участвовать в PVP и многое другое!',
-            btn: '➡️ ДАЛЕЕ'
-        },
-        {
-            title: '🪙 КАК ЗАРАБОТАТЬ?',
-            content: '• Открывай кейсы → получай скины\n• Продавай скины → получай монеты\n• Крути колесо → выигрывай бонусы\n• Забирай ежедневную награду\n• Приглашай друзей → получай бонусы!',
-            btn: '➡️ ДАЛЕЕ'
-        },
-        {
-            title: '🎁 КАК ОТКРЫВАТЬ КЕЙСЫ?',
-            content: 'Выбери кейс на главном экране, нажми "Открыть" и смотри анимацию!\n\nЧем дороже кейс — тем круче скины могут выпасть!',
-            btn: '➡️ ДАЛЕЕ'
-        },
-        {
-            title: '📦 ЧТО ДЕЛАТЬ СО СКИНАМИ?',
-            content: '• Продать → получить монеты\n• Вывести → получить скин на аккаунт\n• Апгрейдить → рискнуть и получить более дорогой скин!',
-            btn: '➡️ ДАЛЕЕ'
-        },
-        {
-            title: '👥 ДРУЗЬЯ И ТОП',
-            content: 'Добавляй друзей, смотри их инвентарь и статус онлайн.\n\nСоревнуйся в ТОПе игроков по монетам, рефералам и предметам!',
-            btn: '➡️ ДАЛЕЕ'
-        },
-        {
-            title: '⬆️ АПГРЕЙД',
-            content: 'Выбери предмет → выбери цель → смотри шанс!\n\nЕсли повезёт — получишь дорогой скин. Если нет — предмет сгорает. Рискни!',
-            btn: '➡️ ДАЛЕЕ'
-        },
-        {
-            title: '🏆 ДОСТИЖЕНИЯ',
-            content: 'За выполнение целей ты получаешь награды!\n\n50 достижений ждут тебя — становись легендой ArtDrop!',
-            btn: '✅ НАЧАТЬ ИГРУ!'
-        }
-    ];
-    
-    const skipBtn = step < steps.length ? 
-        `<button class="case-btn" onclick="skipOnboarding()" style="margin-top:8px;background:rgba(255,255,255,0.05);">⏭️ ПРОПУСТИТЬ</button>` : '';
-    
-    showModal(steps[step-1].title, `
-        <div style="text-align:center;padding:10px 0;">
-            <div style="font-size:16px;color:#c0c0c0;line-height:1.8;text-align:left;white-space:pre-wrap;padding:8px 0;">${steps[step-1].content}</div>
-            <button class="case-btn primary" onclick="nextOnboardingStep(${step})" style="margin-top:8px;">${steps[step-1].btn}</button>
-            ${skipBtn}
-        </div>
-    `);
-}
-
-function nextOnboardingStep(step) {
-    const totalSteps = 7;
-    if (step >= totalSteps) {
-        finishOnboarding();
+function showTutorialStep() {
+    if (tutorialStep >= TUTORIAL_STEPS.length) {
+        finishTutorial();
         return;
     }
-    closeModal();
-    setTimeout(() => showOnboardingStep(step + 1), 300);
-}
-
-function skipOnboarding() {
-    closeModal();
-    finishOnboarding();
-}
-
-function finishOnboarding() {
-    localStorage.setItem('artdrop_onboarded', 'true');
-    showModal('🎉 ГОТОВО!', `
+    
+    const step = TUTORIAL_STEPS[tutorialStep];
+    
+    // Блокируем все кнопки, кроме нужной
+    document.querySelectorAll('.card, .case-btn, .profile-btn, .balance, .modal-close').forEach(el => {
+        if (el.id !== 'tutorialOverlay') {
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.5';
+        }
+    });
+    
+    // Разблокируем только то, что нужно для шага
+    if (step.action === 'open_cases') {
+        document.querySelectorAll('.card').forEach(el => {
+            if (el.querySelector('.card-title')?.textContent.includes('КЕЙСЫ')) {
+                el.style.pointerEvents = 'auto';
+                el.style.opacity = '1';
+                el.style.borderColor = '#00d4ff';
+                el.style.boxShadow = '0 0 30px rgba(0,212,255,0.3)';
+            }
+        });
+    }
+    
+    if (step.action === 'click_case') {
+        const btns = document.querySelectorAll('#casesList .case-btn');
+        btns.forEach(el => {
+            if (el.textContent.includes('BOMJ')) {
+                el.style.pointerEvents = 'auto';
+                el.style.opacity = '1';
+                el.style.borderColor = '#00d4ff';
+                el.style.boxShadow = '0 0 30px rgba(0,212,255,0.3)';
+            }
+        });
+    }
+    
+    if (step.action === 'click_sell') {
+        document.querySelectorAll('.inventory-item .btn-sell').forEach(el => {
+            el.style.pointerEvents = 'auto';
+            el.style.opacity = '1';
+            el.style.borderColor = '#00d4ff';
+        });
+    }
+    
+    if (step.action === 'open_profile') {
+        const avatar = document.querySelector('.profile-btn');
+        if (avatar) {
+            avatar.style.pointerEvents = 'auto';
+            avatar.style.opacity = '1';
+            avatar.style.borderColor = '#ffd700';
+            avatar.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
+        }
+    }
+    
+    // Показываем модалку с инструкцией
+    showModal(step.title, `
         <div style="text-align:center;padding:10px 0;">
-            <div style="font-size:40px;margin:10px 0;">🚀</div>
-            <div style="font-size:20px;font-weight:700;color:#00d4ff;">Ты готов к игре!</div>
-            <div style="color:#6a7a8e;font-size:14px;padding:8px 0;">Открывай кейсы, собирай скины и становись лучшим!</div>
-            <button class="case-btn primary" onclick="closeModal()">✅ НАЧАТЬ!</button>
+            <div style="font-size:16px;color:#c0c0c0;line-height:1.8;text-align:left;white-space:pre-wrap;padding:8px 0;">${step.text}</div>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+                <button class="case-btn primary" onclick="executeTutorialAction('${step.action}')" style="pointer-events:auto !important;opacity:1 !important;">${step.button}</button>
+                <button class="case-btn" onclick="skipTutorial()" style="background:rgba(255,255,255,0.05);pointer-events:auto !important;opacity:1 !important;">⏭️ ПРОПУСТИТЬ ОБУЧЕНИЕ</button>
+            </div>
         </div>
     `);
 }
 
-// ============ АНИМАЦИИ КЕЙСОВ (ПЛАВНЫЕ + СИНХРОНИЗАЦИЯ) ============
+function executeTutorialAction(action) {
+    const step = TUTORIAL_STEPS[tutorialStep];
+    
+    switch(action) {
+        case 'open_cases':
+            closeModal();
+            // Показываем подсказку
+            setTimeout(() => {
+                showToast('👆 Нажми на карточку "КЕЙСЫ"', 'info', 5000);
+            }, 300);
+            // Разблокируем кнопку КЕЙСЫ
+            document.querySelectorAll('.card').forEach(el => {
+                if (el.querySelector('.card-title')?.textContent.includes('КЕЙСЫ')) {
+                    el.style.pointerEvents = 'auto';
+                    el.style.opacity = '1';
+                    el.style.borderColor = '#00d4ff';
+                    el.style.boxShadow = '0 0 30px rgba(0,212,255,0.3)';
+                }
+            });
+            break;
+            
+        case 'click_case':
+            closeModal();
+            // Слушаем клик по BOMJ
+            const btns = document.querySelectorAll('#casesList .case-btn');
+            btns.forEach(el => {
+                if (el.textContent.includes('BOMJ')) {
+                    el.style.pointerEvents = 'auto';
+                    el.style.opacity = '1';
+                    el.style.borderColor = '#00d4ff';
+                    el.style.boxShadow = '0 0 30px rgba(0,212,255,0.3)';
+                    // Сохраняем оригинальный onclick
+                    const origOnclick = el.onclick;
+                    el.onclick = function(e) {
+                        if (tutorialActive && tutorialStep === 1) {
+                            // Открываем кейс через оригинальную функцию, но с флагом обучения
+                            tutorialCaseOpened = true;
+                            origOnclick.call(this, e);
+                            // Ждём результат и переходим дальше
+                            setTimeout(() => {
+                                if (tutorialStep === 1) {
+                                    tutorialStep = 2;
+                                    setTimeout(showTutorialStep, 500);
+                                }
+                            }, 3000);
+                        }
+                    };
+                }
+            });
+            showToast('👆 Нажми на кнопку "🥫 BOMJ"', 'info', 5000);
+            break;
+            
+        case 'go_inventory':
+            closeModal();
+            // Если пользователь уже в инвентаре, просто переходим дальше
+            setTimeout(() => {
+                if (document.getElementById('inventory-screen').style.display === 'block') {
+                    tutorialStep = 3;
+                    setTimeout(showTutorialStep, 500);
+                } else {
+                    showScreen('inventory');
+                    setTimeout(() => {
+                        tutorialStep = 3;
+                        setTimeout(showTutorialStep, 500);
+                    }, 1000);
+                }
+            }, 300);
+            break;
+            
+        case 'click_sell':
+            closeModal();
+            // Разблокируем кнопки продажи
+            document.querySelectorAll('.inventory-item .btn-sell').forEach(el => {
+                el.style.pointerEvents = 'auto';
+                el.style.opacity = '1';
+                el.style.borderColor = '#00d4ff';
+            });
+            showToast('👆 Нажми кнопку "ПРОДАТЬ" на своём скине', 'info', 5000);
+            break;
+            
+        case 'open_profile':
+            closeModal();
+            const avatar = document.querySelector('.profile-btn');
+            if (avatar) {
+                avatar.style.pointerEvents = 'auto';
+                avatar.style.opacity = '1';
+                avatar.style.borderColor = '#ffd700';
+                avatar.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
+            }
+            showToast('👆 Нажми на аватарку в правом верхнем углу', 'info', 5000);
+            break;
+            
+        case 'open_friends':
+            closeModal();
+            // Если пользователь уже в друзьях, переходим дальше
+            setTimeout(() => {
+                if (document.getElementById('friends-screen').style.display === 'block') {
+                    tutorialStep = 6;
+                    setTimeout(showTutorialStep, 500);
+                } else {
+                    showScreen('friends');
+                    setTimeout(() => {
+                        tutorialStep = 6;
+                        setTimeout(showTutorialStep, 500);
+                    }, 1000);
+                }
+            }, 300);
+            break;
+            
+        case 'finish':
+            closeModal();
+            finishTutorial();
+            break;
+            
+        default:
+            closeModal();
+            tutorialStep++;
+            setTimeout(showTutorialStep, 500);
+    }
+}
+
+function skipTutorial() {
+    closeModal();
+    finishTutorial();
+}
+
+function finishTutorial() {
+    tutorialActive = false;
+    localStorage.setItem('artdrop_onboarded', 'true');
+    
+    // Разблокируем все кнопки
+    document.querySelectorAll('.card, .case-btn, .profile-btn, .balance, .modal-close').forEach(el => {
+        el.style.pointerEvents = 'auto';
+        el.style.opacity = '1';
+        el.style.borderColor = '';
+        el.style.boxShadow = '';
+    });
+    
+    showModal('🎉 ТЫ ГОТОВ!', `
+        <div style="text-align:center;padding:10px 0;">
+            <div style="font-size:40px;margin:10px 0;">🚀</div>
+            <div style="font-size:20px;font-weight:700;color:#00d4ff;">Ты освоил ArtDrop!</div>
+            <div style="color:#6a7a8e;font-size:14px;padding:8px 0;">Открывай кейсы, собирай скины и становись лучшим!</div>
+            <button class="case-btn primary" onclick="closeModal();showScreen('main')">✅ НАЧАТЬ!</button>
+        </div>
+    `);
+}
+
+// ============ АНИМАЦИЯ КЕЙСОВ (С ФИЗИКОЙ) ============
+
 class CaseAnimation {
     constructor(caseName, realItem, realPrice, callback) {
         this.caseName = caseName;
@@ -570,30 +959,49 @@ class CaseAnimation {
         this.skins = this.getCaseSkins();
         this.currentIndex = 0;
         this.isSpinning = true;
-        this.stopAt = randomInt(18, 35);
-        this.resultItem = null;
-        this.resultPrice = 0;
-        this.maxSpeed = 180;
-        this.minSpeed = 60;
-        this.currentSpeed = this.maxSpeed;
+        this.startTime = Date.now();
+        this.duration = 4000;
         this.createUI();
         this.startSpin();
     }
     
     getCaseSkins() {
         return [
-            ["P90 | Sand Spray", 180], ["MP9 | Sand Dashed", 177],
-            ["SCAR-20 | Zinc", 167], ["SG 553 | Night Camo", 162],
-            ["XM1014 | Canvas Cloud", 160], ["Sticker | BLAST.tv", 155],
-            ["MP5-SD | Dirt Drop", 192], ["Sticker | The Huns", 192],
-            ["G3SG1 | Red Jasper", 185], ["UMP-45 | Facility Dark", 375],
-            ["Sticker | FlameZ", 365], ["SCAR-20 | Short Ochre", 330],
-            ["Tec-9 | Blue Blast", 215], ["Sticker | apEX", 442],
-            ["MP9 | Slide", 440], ["UMP-45 | Mudder", 500],
-            ["SCAR-20 | Contractor", 500], ["AUG | Sweeper", 477],
-            ["Sticker | FURIA", 472], ["FAMAS | Palm", 115],
-            ["Nova | Sand Dune", 577], ["MP9 | Sand Dashed", 577],
-            ["UMP-45 | Facility Dark", 542], ["G3SG1 | Desert Storm", 537]
+            {name: "P90 | Sand Spray", price: 180, rarity: "Синий"},
+            {name: "MP9 | Sand Dashed", price: 177, rarity: "Синий"},
+            {name: "SCAR-20 | Zinc", price: 167, rarity: "Синий"},
+            {name: "SG 553 | Night Camo", price: 162, rarity: "Синий"},
+            {name: "XM1014 | Canvas Cloud", price: 160, rarity: "Синий"},
+            {name: "Sticker | BLAST.tv", price: 155, rarity: "Белый"},
+            {name: "MP5-SD | Dirt Drop", price: 192, rarity: "Синий"},
+            {name: "Sticker | The Huns", price: 192, rarity: "Белый"},
+            {name: "G3SG1 | Red Jasper", price: 185, rarity: "Синий"},
+            {name: "UMP-45 | Facility Dark", price: 375, rarity: "Фиолетовый"},
+            {name: "Sticker | FlameZ", price: 365, rarity: "Белый"},
+            {name: "SCAR-20 | Short Ochre", price: 330, rarity: "Синий"},
+            {name: "Tec-9 | Blue Blast", price: 215, rarity: "Синий"},
+            {name: "Sticker | apEX", price: 442, rarity: "Белый"},
+            {name: "MP9 | Slide", price: 440, rarity: "Синий"},
+            {name: "UMP-45 | Mudder", price: 500, rarity: "Синий"},
+            {name: "SCAR-20 | Contractor", price: 500, rarity: "Синий"},
+            {name: "AUG | Sweeper", price: 477, rarity: "Фиолетовый"},
+            {name: "Sticker | FURIA", price: 472, rarity: "Белый"},
+            {name: "FAMAS | Palm", price: 115, rarity: "Белый"},
+            {name: "Nova | Sand Dune", price: 577, rarity: "Фиолетовый"},
+            {name: "MP9 | Sand Dashed", price: 577, rarity: "Синий"},
+            {name: "UMP-45 | Facility Dark", price: 542, rarity: "Фиолетовый"},
+            {name: "G3SG1 | Desert Storm", price: 537, rarity: "Синий"},
+            {name: "AK-47 | Elite Build", price: 20000, rarity: "Розовый"},
+            {name: "M4A4 | Magnesium", price: 12437, rarity: "Розовый"},
+            {name: "AWP | Safari Mesh", price: 6940, rarity: "Фиолетовый"},
+            {name: "Desert Eagle | Oxide Blaze", price: 10017, rarity: "Розовый"},
+            {name: "SSG 08 | Fever Dream", price: 16777, rarity: "Розовый"},
+            {name: "M4A1-S | Nitro", price: 16062, rarity: "Розовый"},
+            {name: "Glock-18 | Coral Bloom", price: 11645, rarity: "Розовый"},
+            {name: "AK-47 | Safari Mesh", price: 2497, rarity: "Фиолетовый"},
+            {name: "★ Karambit | Doppler", price: 150000, rarity: "Желтый"},
+            {name: "★ Butterfly | Fade", price: 200000, rarity: "Желтый"},
+            {name: "★ M9 Bayonet | Marble Fade", price: 180000, rarity: "Желтый"},
         ];
     }
     
@@ -603,7 +1011,7 @@ class CaseAnimation {
         
         const caseNames = {"bomj":"🥫 КЕЙС БОМЖ","berkut":"🦅 КЕЙС БЕРКУТ","champion":"🏆 КЕЙС ЧЕМПИОН","draft":"📦 КЕЙС DRAFT"};
         const title = document.createElement('div');
-        title.style.cssText = 'color:#00d4ff;font-size:22px;font-weight:700;margin-bottom:30px;letter-spacing:3px;text-shadow:0 0 20px rgba(0,212,255,0.3);';
+        title.style.cssText = 'color:#00d4ff;font-size:22px;font-weight:700;margin-bottom:20px;letter-spacing:3px;text-shadow:0 0 20px rgba(0,212,255,0.3);';
         title.textContent = caseNames[this.caseName] || 'КЕЙС';
         this.overlay.appendChild(title);
         
@@ -611,102 +1019,180 @@ class CaseAnimation {
         this.container.style.cssText = 'width:85%;max-width:450px;height:90px;position:relative;overflow:hidden;margin-bottom:15px;background:rgba(0,212,255,0.03);border-radius:12px;border:1px solid rgba(0,212,255,0.08);';
         this.overlay.appendChild(this.container);
         
+        this.resultFrame = document.createElement('div');
+        this.resultFrame.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:80%;border:2px solid #ffd700;border-radius:8px;z-index:5;box-shadow:0 0 30px rgba(255,215,0,0.3);background:rgba(255,215,0,0.05);';
+        this.container.appendChild(this.resultFrame);
+        
         this.indicator = document.createElement('div');
-        this.indicator.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:80%;background:#00d4ff;z-index:10;border-radius:4px;box-shadow:0 0 30px rgba(0,212,255,0.7);';
+        this.indicator.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:70%;background:#ffd700;z-index:6;border-radius:2px;';
         this.container.appendChild(this.indicator);
         
         this.skinsLayer = document.createElement('div');
-        this.skinsLayer.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;';
+        this.skinsLayer.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;transition:filter 0.05s;';
         this.container.appendChild(this.skinsLayer);
         
         this.currentSkinLabel = document.createElement('div');
-        this.currentSkinLabel.style.cssText = 'color:#ffffff;font-size:28px;font-weight:700;text-align:center;min-height:40px;transition:all 0.3s ease;text-shadow:0 0 30px rgba(0,212,255,0.2);margin-top:10px;';
+        this.currentSkinLabel.style.cssText = 'color:#ffffff;font-size:24px;font-weight:700;text-align:center;min-height:32px;transition:opacity 0.05s;text-shadow:0 0 30px rgba(0,212,255,0.2);margin-top:10px;';
         this.overlay.appendChild(this.currentSkinLabel);
         
         this.currentPriceLabel = document.createElement('div');
-        this.currentPriceLabel.style.cssText = 'color:#00d4ff;font-size:20px;font-weight:600;text-align:center;min-height:30px;text-shadow:0 0 20px rgba(0,212,255,0.2);';
+        this.currentPriceLabel.style.cssText = 'color:#00d4ff;font-size:18px;font-weight:600;text-align:center;min-height:28px;text-shadow:0 0 20px rgba(0,212,255,0.2);';
         this.overlay.appendChild(this.currentPriceLabel);
         
-        document.body.appendChild(this.overlay);
-        
         this.skinElements = [];
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 7; i++) {
             const el = document.createElement('div');
-            el.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.6);font-size:18px;font-weight:500;white-space:nowrap;opacity:0.2;transition:all 0.3s cubic-bezier(0.25,0.1,0.25,1);text-shadow:0 0 10px rgba(0,212,255,0.1);';
+            el.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.7);font-size:16px;font-weight:500;white-space:nowrap;opacity:0.3;transition:all 0.05s;text-shadow:0 0 10px rgba(0,212,255,0.1);';
             this.skinsLayer.appendChild(el);
             this.skinElements.push(el);
         }
+        
+        document.body.appendChild(this.overlay);
     }
     
     startSpin() { this.nextSkin(); }
     
+    getSpeed(progress) {
+        if (progress < 0.15) {
+            return 0.6 + (progress / 0.15) * 0.4;
+        }
+        if (progress < 0.7) {
+            return 1.0;
+        }
+        const t = (progress - 0.7) / 0.3;
+        const bounce = 1 + 0.3 * Math.exp(-5 * t) * Math.cos(10 * t);
+        return Math.max(0.05, bounce * (1 - t * 0.95));
+    }
+    
     nextSkin() {
         if (!this.isSpinning) return;
         
-        this.currentSkinLabel.style.transition = 'opacity 0.15s ease';
+        const elapsed = Date.now() - this.startTime;
+        const progress = Math.min(elapsed / this.duration, 1);
+        
+        const speedFactor = this.getSpeed(progress);
+        const baseSpeed = 70;
+        const currentSpeed = baseSpeed / Math.max(speedFactor, 0.05);
+        
+        const blurAmount = Math.min(12, speedFactor * 8);
+        this.skinsLayer.style.filter = `blur(${blurAmount}px)`;
+        
+        this.currentSkinLabel.style.transition = 'opacity 0.05s';
         this.currentSkinLabel.style.opacity = '0';
         
         setTimeout(() => {
-            const name = this.skins[this.currentIndex % this.skins.length][0];
-            const price = this.skins[this.currentIndex % this.skins.length][1];
-            this.resultItem = name;
-            this.resultPrice = price;
-            this.currentSkinLabel.textContent = name;
-            this.currentPriceLabel.textContent = price + ' 🪙';
+            const idx = this.currentIndex % this.skins.length;
+            const skin = this.skins[idx];
+            this.currentSkinLabel.textContent = skin.name;
+            this.currentPriceLabel.textContent = skin.price + ' 🪙';
             this.currentSkinLabel.style.opacity = '1';
-        }, 150);
-        
-        const progress = Math.min(this.currentIndex / this.stopAt, 1);
-        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOutCubic(progress);
+        }, 20);
         
         for (let i = 0; i < this.skinElements.length; i++) {
             const el = this.skinElements[i];
             const idx = (this.currentIndex + i) % this.skins.length;
-            const skinName = this.skins[idx][0];
-            const skinPrice = this.skins[idx][1];
-            el.textContent = `${skinName} (${skinPrice}🪙)`;
-            const positions = [-55, -28, 0, 28, 55];
+            const skin = this.skins[idx];
+            el.textContent = `${skin.name} (${skin.price}🪙)`;
+            const positions = [-65, -40, -18, 0, 18, 40, 65];
             const pos = positions[i];
             el.style.left = (50 + pos) + '%';
-            el.style.transform = `translate(-50%, -50%) scale(${1 - Math.abs(pos) / 100})`;
-            el.style.opacity = 0.2 + (1 - Math.abs(pos) / 60) * 0.6;
-            el.style.filter = Math.abs(pos) > 40 ? 'blur(3px)' : 'blur(0px)';
+            el.style.transform = `translate(-50%, -50%) scale(${1 - Math.abs(pos) / 120})`;
+            el.style.opacity = 0.15 + (1 - Math.abs(pos) / 70) * 0.7;
+            el.style.filter = Math.abs(pos) > 50 ? 'blur(4px)' : 'blur(0px)';
+            
+            const rarityColors = {
+                'Белый': '#b0b0b0',
+                'Синий': '#4a7db4',
+                'Фиолетовый': '#b84ad6',
+                'Розовый': '#d64a8a',
+                'Красный': '#d64a4a',
+                'Желтый': '#ffd700'
+            };
+            el.style.color = rarityColors[skin.rarity] || '#ffffff';
         }
+        
         this.currentIndex++;
-        if (this.currentIndex >= this.stopAt) {
+        
+        if (progress >= 1) {
             this.isSpinning = false;
-            setTimeout(() => this.finish(), 700);
+            setTimeout(() => this.finish(), 300);
             return;
         }
-        setTimeout(() => this.nextSkin(), this.currentSpeed);
+        
+        setTimeout(() => this.nextSkin(), currentSpeed);
     }
     
     finish() {
-        // === ПОДМЕНЯЕМ НА РЕАЛЬНЫЙ РЕЗУЛЬТАТ ===
-        this.currentSkinLabel.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        this.skinsLayer.style.filter = 'blur(0px)';
+        
+        let realRarity = 'Синий';
+        for (const skin of this.skins) {
+            if (skin.name === this.realItem) {
+                realRarity = skin.rarity;
+                break;
+            }
+        }
+        
+        const rarityColors = {
+            'Белый': '#b0b0b0',
+            'Синий': '#4a7db4',
+            'Фиолетовый': '#b84ad6',
+            'Розовый': '#d64a8a',
+            'Красный': '#d64a4a',
+            'Желтый': '#ffd700'
+        };
+        
+        const flashColor = realRarity === 'Желтый' || realRarity === 'Розовый' ? '#ffd700' : '#b84ad6';
+        
+        this.resultFrame.style.borderColor = flashColor;
+        this.resultFrame.style.boxShadow = `0 0 60px ${flashColor}88, 0 0 120px ${flashColor}44`;
+        this.resultFrame.style.background = `radial-gradient(circle, ${flashColor}22, transparent)`;
+        
+        this.currentSkinLabel.style.transition = 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
         this.currentSkinLabel.textContent = this.realItem;
-        this.currentSkinLabel.style.color = '#ffd700';
-        this.currentSkinLabel.style.fontSize = '42px';
+        this.currentSkinLabel.style.color = rarityColors[realRarity] || '#ffffff';
+        this.currentSkinLabel.style.fontSize = '32px';
+        this.currentSkinLabel.style.textShadow = `0 0 40px ${rarityColors[realRarity] || '#00d4ff'}66`;
+        
         this.currentPriceLabel.textContent = this.realPrice + ' 🪙';
         this.currentPriceLabel.style.color = '#ffd700';
-        this.currentPriceLabel.style.fontSize = '24px';
+        this.currentPriceLabel.style.fontSize = '22px';
+        
+        const flash = document.createElement('div');
+        flash.style.cssText = `
+            position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+            width:300px;height:300px;border-radius:50%;
+            background:radial-gradient(circle, ${flashColor}88, transparent 70%);
+            z-index:20;opacity:0;
+            transition:all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events:none;
+        `;
+        this.overlay.appendChild(flash);
+        
+        setTimeout(() => {
+            flash.style.opacity = '1';
+            flash.style.width = '800px';
+            flash.style.height = '800px';
+        }, 50);
         
         this.indicator.style.transition = 'opacity 0.5s ease';
         this.indicator.style.opacity = '0';
+        this.resultFrame.style.transition = 'opacity 0.5s ease';
+        this.resultFrame.style.opacity = '0';
         
         setTimeout(() => {
-            this.overlay.style.transition = 'opacity 0.4s ease';
+            this.overlay.style.transition = 'opacity 0.5s ease';
             this.overlay.style.opacity = '0';
             setTimeout(() => {
                 this.overlay.remove();
                 if (this.callback) this.callback(this.realItem, this.realPrice);
-            }, 400);
-        }, 1200);
+            }, 500);
+        }, 1500);
     }
 }
 
-// ============ АНИМАЦИЯ КОЛЕСА (СИНХРОНИЗАЦИЯ) ============
+// ============ АНИМАЦИЯ КОЛЕСА ============
+
 class WheelAnimation {
     constructor(realPrize, callback) {
         this.realPrize = realPrize;
@@ -721,11 +1207,8 @@ class WheelAnimation {
         ];
         this.currentIndex = 0;
         this.isSpinning = true;
-        this.stopAt = randomInt(22, 38);
-        this.result = null;
-        this.maxSpeed = 160;
-        this.minSpeed = 50;
-        this.currentSpeed = this.maxSpeed;
+        this.startTime = Date.now();
+        this.duration = 4000;
         this.createUI();
         this.startSpin();
     }
@@ -733,97 +1216,150 @@ class WheelAnimation {
     createUI() {
         this.overlay = document.createElement('div');
         this.overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;';
+        
         const title = document.createElement('div');
-        title.style.cssText = 'color:#00d4ff;font-size:22px;font-weight:700;margin-bottom:30px;letter-spacing:3px;text-shadow:0 0 20px rgba(0,212,255,0.3);';
+        title.style.cssText = 'color:#00d4ff;font-size:22px;font-weight:700;margin-bottom:20px;letter-spacing:3px;text-shadow:0 0 20px rgba(0,212,255,0.3);';
         title.textContent = '🎡 КОЛЕСО ФОРТУНЫ';
         this.overlay.appendChild(title);
+        
         this.container = document.createElement('div');
         this.container.style.cssText = 'width:85%;max-width:450px;height:90px;position:relative;overflow:hidden;margin-bottom:15px;background:rgba(0,212,255,0.03);border-radius:12px;border:1px solid rgba(0,212,255,0.08);';
         this.overlay.appendChild(this.container);
+        
+        this.resultFrame = document.createElement('div');
+        this.resultFrame.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:140px;height:80%;border:2px solid #ffd700;border-radius:8px;z-index:5;box-shadow:0 0 30px rgba(255,215,0,0.3);background:rgba(255,215,0,0.05);';
+        this.container.appendChild(this.resultFrame);
+        
         this.indicator = document.createElement('div');
-        this.indicator.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:80%;background:#00d4ff;z-index:10;border-radius:4px;box-shadow:0 0 30px rgba(0,212,255,0.7);';
+        this.indicator.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:70%;background:#ffd700;z-index:6;border-radius:2px;';
         this.container.appendChild(this.indicator);
+        
         this.prizesLayer = document.createElement('div');
-        this.prizesLayer.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;';
+        this.prizesLayer.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;transition:filter 0.05s;';
         this.container.appendChild(this.prizesLayer);
+        
         this.currentPrizeLabel = document.createElement('div');
-        this.currentPrizeLabel.style.cssText = 'color:#ffffff;font-size:32px;font-weight:700;text-align:center;min-height:40px;transition:all 0.3s ease;text-shadow:0 0 30px rgba(0,212,255,0.2);margin-top:10px;';
+        this.currentPrizeLabel.style.cssText = 'color:#ffffff;font-size:28px;font-weight:700;text-align:center;min-height:36px;transition:opacity 0.05s;text-shadow:0 0 30px rgba(0,212,255,0.2);margin-top:10px;';
         this.overlay.appendChild(this.currentPrizeLabel);
+        
         this.prizeElements = [];
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 7; i++) {
             const el = document.createElement('div');
-            el.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.6);font-size:18px;font-weight:500;white-space:nowrap;opacity:0.2;transition:all 0.3s cubic-bezier(0.25,0.1,0.25,1);';
+            el.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.7);font-size:16px;font-weight:500;white-space:nowrap;opacity:0.3;transition:all 0.05s;';
             this.prizesLayer.appendChild(el);
             this.prizeElements.push(el);
         }
+        
         document.body.appendChild(this.overlay);
     }
     
     startSpin() { this.nextPrize(); }
     
+    getSpeed(progress) {
+        if (progress < 0.15) return 0.6 + (progress / 0.15) * 0.4;
+        if (progress < 0.7) return 1.0;
+        const t = (progress - 0.7) / 0.3;
+        const bounce = 1 + 0.3 * Math.exp(-5 * t) * Math.cos(10 * t);
+        return Math.max(0.05, bounce * (1 - t * 0.95));
+    }
+    
     nextPrize() {
         if (!this.isSpinning) return;
         
-        this.currentPrizeLabel.style.transition = 'opacity 0.15s ease';
+        const elapsed = Date.now() - this.startTime;
+        const progress = Math.min(elapsed / this.duration, 1);
+        
+        const speedFactor = this.getSpeed(progress);
+        const baseSpeed = 65;
+        const currentSpeed = baseSpeed / Math.max(speedFactor, 0.05);
+        
+        const blurAmount = Math.min(12, speedFactor * 8);
+        this.prizesLayer.style.filter = `blur(${blurAmount}px)`;
+        
+        this.currentPrizeLabel.style.transition = 'opacity 0.05s';
         this.currentPrizeLabel.style.opacity = '0';
         
         setTimeout(() => {
             const name = this.prizes[this.currentIndex % this.prizes.length][0];
-            const value = this.prizes[this.currentIndex % this.prizes.length][1];
-            const type = this.prizes[this.currentIndex % this.prizes.length][2];
-            this.result = {name, value, type};
             this.currentPrizeLabel.textContent = name;
             this.currentPrizeLabel.style.opacity = '1';
-        }, 150);
-        
-        const progress = Math.min(this.currentIndex / this.stopAt, 1);
-        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-        this.currentSpeed = this.maxSpeed - (this.maxSpeed - this.minSpeed) * easeOutCubic(progress);
+        }, 20);
         
         for (let i = 0; i < this.prizeElements.length; i++) {
             const el = this.prizeElements[i];
             const idx = (this.currentIndex + i) % this.prizes.length;
-            const prizeName = this.prizes[idx][0];
-            el.textContent = prizeName;
-            const positions = [-55, -28, 0, 28, 55];
+            el.textContent = this.prizes[idx][0];
+            const positions = [-65, -40, -18, 0, 18, 40, 65];
             const pos = positions[i];
             el.style.left = (50 + pos) + '%';
-            el.style.transform = `translate(-50%, -50%) scale(${1 - Math.abs(pos) / 100})`;
-            el.style.opacity = 0.2 + (1 - Math.abs(pos) / 60) * 0.6;
-            el.style.filter = Math.abs(pos) > 40 ? 'blur(3px)' : 'blur(0px)';
+            el.style.transform = `translate(-50%, -50%) scale(${1 - Math.abs(pos) / 120})`;
+            el.style.opacity = 0.15 + (1 - Math.abs(pos) / 70) * 0.7;
+            el.style.filter = Math.abs(pos) > 50 ? 'blur(4px)' : 'blur(0px)';
         }
+        
         this.currentIndex++;
-        if (this.currentIndex >= this.stopAt) {
+        
+        if (progress >= 1) {
             this.isSpinning = false;
-            setTimeout(() => this.finish(), 700);
+            setTimeout(() => this.finish(), 300);
             return;
         }
-        setTimeout(() => this.nextPrize(), this.currentSpeed);
+        
+        setTimeout(() => this.nextPrize(), currentSpeed);
     }
     
     finish() {
-        // === ПОДМЕНЯЕМ НА РЕАЛЬНЫЙ РЕЗУЛЬТАТ ===
+        this.prizesLayer.style.filter = 'blur(0px)';
+        
+        this.resultFrame.style.borderColor = '#ffd700';
+        this.resultFrame.style.boxShadow = '0 0 60px #ffd70088, 0 0 120px #ffd70044';
+        
         let displayName = this.realPrize.name || this.realPrize;
-        this.currentPrizeLabel.style.transition = 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        if (typeof this.realPrize === 'string') displayName = this.realPrize;
+        if (this.realPrize.type === 'coins') displayName = `${this.realPrize.value} 🪙`;
+        if (this.realPrize.type === 'discount') displayName = `${this.realPrize.value}% скидка`;
+        
+        this.currentPrizeLabel.style.transition = 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
         this.currentPrizeLabel.textContent = displayName;
         this.currentPrizeLabel.style.color = '#ffd700';
-        this.currentPrizeLabel.style.fontSize = '44px';
+        this.currentPrizeLabel.style.fontSize = '40px';
+        this.currentPrizeLabel.style.textShadow = '0 0 60px rgba(255,215,0,0.5)';
+        
+        const flash = document.createElement('div');
+        flash.style.cssText = `
+            position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+            width:300px;height:300px;border-radius:50%;
+            background:radial-gradient(circle, #ffd70088, transparent 70%);
+            z-index:20;opacity:0;
+            transition:all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events:none;
+        `;
+        this.overlay.appendChild(flash);
+        
+        setTimeout(() => {
+            flash.style.opacity = '1';
+            flash.style.width = '800px';
+            flash.style.height = '800px';
+        }, 50);
         
         this.indicator.style.transition = 'opacity 0.5s ease';
         this.indicator.style.opacity = '0';
+        this.resultFrame.style.transition = 'opacity 0.5s ease';
+        this.resultFrame.style.opacity = '0';
         
         setTimeout(() => {
-            this.overlay.style.transition = 'opacity 0.4s ease';
+            this.overlay.style.transition = 'opacity 0.5s ease';
             this.overlay.style.opacity = '0';
             setTimeout(() => {
                 this.overlay.remove();
                 if (this.callback) this.callback(this.realPrize);
-            }, 400);
-        }, 1200);
+            }, 500);
+        }, 1500);
     }
 }
 
 // ============ АНИМАЦИЯ АПГРЕЙДА ============
+
 class UpgradeAnimation {
     constructor(success, callback) {
         this.success = success;
@@ -841,26 +1377,23 @@ class UpgradeAnimation {
         this.overlay.appendChild(title);
         
         this.resultLabel = document.createElement('div');
-        this.resultLabel.style.cssText = 'font-size:80px;font-weight:900;text-align:center;transition:all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);text-shadow:0 0 60px rgba(0,212,255,0.3);';
-        this.resultLabel.textContent = this.success ? '⬆️' : '💔';
+        this.resultLabel.style.cssText = 'font-size:100px;font-weight:900;text-align:center;transition:all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);text-shadow:0 0 60px rgba(0,212,255,0.3);';
+        this.resultLabel.textContent = this.success ? 'UP' : 'LOSE';
         this.overlay.appendChild(this.resultLabel);
         
         this.statusLabel = document.createElement('div');
-        this.statusLabel.style.cssText = 'color:#ffffff;font-size:32px;font-weight:700;text-align:center;margin-top:15px;transition:all 0.5s ease;';
-        this.statusLabel.textContent = this.success ? 'UP' : 'LOSE';
+        this.statusLabel.style.cssText = 'color:#ffffff;font-size:24px;font-weight:600;text-align:center;margin-top:15px;transition:all 0.5s ease;';
+        this.statusLabel.textContent = this.success ? '✅ УСПЕШНО!' : '💔 НЕ УДАЛОСЬ';
         this.overlay.appendChild(this.statusLabel);
         
         document.body.appendChild(this.overlay);
         
-        // Анимация
         setTimeout(() => {
             this.resultLabel.style.transform = 'scale(1.5)';
             this.resultLabel.style.color = this.success ? '#00d4ff' : '#ff4444';
             this.resultLabel.style.textShadow = this.success ? 
-                '0 0 80px rgba(0,212,255,0.5)' : '0 0 80px rgba(255,68,68,0.5)';
-            
+                '0 0 100px rgba(0,212,255,0.5)' : '0 0 100px rgba(255,68,68,0.5)';
             this.statusLabel.style.color = this.success ? '#00d4ff' : '#ff4444';
-            this.statusLabel.style.fontSize = '48px';
         }, 300);
         
         setTimeout(() => {
@@ -925,10 +1458,9 @@ function claimDailyReward() {
             const rewards = {1:500,2:750,3:1000,4:1250,5:1500,6:2500,7:3000};
             const day = data.day;
             const reward = rewards[day] || 500;
-            showModal('🎉 НАГРАДА ПОЛУЧЕНА!', `День ${day} — +${reward} 🪙`);
+            showToast(`🎁 Ежедневная награда! День ${day} — +${reward} 🪙`, 'success', 8000);
             loadBalance();
             updateDailyButton();
-            setTimeout(() => showScreen('main'), 1500);
         } else {
             showModal('❌ ОШИБКА', data.error || 'Не удалось получить награду');
         }
@@ -974,6 +1506,7 @@ function verifySubscription() {
             if (data.already_rewarded) {
                 showModal('ℹ️ УЖЕ ПОЛУЧЕНО', data.message);
             } else {
+                showToast(`🎉 Подписка подтверждена! +${data.reward} 🪙`, 'success', 8000);
                 showModal('🎉 ПОЗДРАВЛЯЮ!', `
                     <div style="text-align:center;">
                         <div style="font-size:40px;margin:10px 0;">🎉</div>
@@ -1043,13 +1576,18 @@ function openCase(caseName, price) {
                             <div style="font-size:20px;font-weight:700;color:#00d4ff;">ВЫПАЛО!</div>
                             <div style="font-size:18px;font-weight:600;padding:8px 0;">${item}</div>
                             <div style="font-size:16px;color:#ffd700;">${price} 🪙</div>
-                            <div style="display:flex;gap:10px;margin-top:16px;">
-                                <button class="case-btn" onclick="closeModal();openCase('${caseName}',${price})" style="flex:1;background:rgba(0,212,255,0.15);">🔄 ЕЩЁ</button>
-                                <button class="case-btn primary" onclick="closeModal();loadInventory();loadBalance();" style="flex:1;">✅ ОК</button>
+                            <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+                                <button class="case-btn" onclick="closeModal();openCase('${caseName}',${price})" style="background:rgba(0,212,255,0.15);">🔄 ЕЩЁ</button>
+                                <button class="case-btn primary" onclick="closeModal();loadInventory();loadBalance();">✅ В ИНВЕНТАРЬ</button>
+                                <button class="case-btn" onclick="sellItemFromResult('${item}', ${price})" style="background:#ffd700;color:#0a0a0f;">💰 ПРОДАТЬ СРАЗУ</button>
                             </div>
                         </div>
                     `);
                     loadBalance();
+                    if (tutorialActive && tutorialCaseOpened) {
+                        tutorialStep = 2;
+                        setTimeout(showTutorialStep, 500);
+                    }
                 });
             } else {
                 showModal('❌ ОШИБКА', data.error || 'Не удалось открыть');
@@ -1058,33 +1596,94 @@ function openCase(caseName, price) {
     });
 }
 
-// ============ ИНВЕНТАРЬ ============
-function loadInventory() {
-    const list = document.getElementById('inventoryList');
-    if (!list) return;
-    list.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
+function sellItemFromResult(itemName, itemPrice) {
+    if (!confirm(`Продать "${itemName}" за ${itemPrice} 🪙?`)) return;
+    
     fetch(`/api/miniapp_inventory?user_id=${userId}`)
     .then(res => res.json())
     .then(data => {
         if (data.items && data.items.length > 0) {
-            let html = '', total = 0;
+            const found = data.items.find(i => i.name === itemName && i.price === itemPrice && i.withdraw_status !== 'pending');
+            if (found) {
+                sellItem(found.id, found.price);
+            } else {
+                showModal('❌ ОШИБКА', 'Предмет не найден в инвентаре');
+            }
+        }
+    });
+}
+
+// ============ ИНВЕНТАРЬ (2 КОЛОНКИ + ВЫБОРОЧНАЯ ПРОДАЖА) ============
+
+function loadInventory() {
+    const list = document.getElementById('inventoryList');
+    if (!list) return;
+    list.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
+    selectedItems.clear();
+    selectMode = false;
+    
+    const sellSelectedBtn = document.getElementById('sellSelectedBtn');
+    if (sellSelectedBtn) sellSelectedBtn.style.display = 'none';
+    
+    fetch(`/api/miniapp_inventory?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.items && data.items.length > 0) {
+            let html = '';
+            let total = 0;
+            
+            // Кнопки управления
+            html += `
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                    <button class="case-btn" onclick="toggleSelectMode()" id="selectModeBtn" style="flex:1;min-width:80px;padding:10px;margin:0;background:rgba(0,212,255,0.1);">✅ ВЫБРАТЬ</button>
+                    <button class="case-btn primary" onclick="sellSelected()" id="sellSelectedBtn" style="flex:1;min-width:80px;padding:10px;margin:0;display:none;">💰 ПРОДАТЬ ВЫБРАННЫЕ</button>
+                    <button class="case-btn" onclick="sellAll()" style="flex:1;min-width:80px;padding:10px;margin:0;background:rgba(255,215,0,0.1);">💰 ПРОДАТЬ ВСЁ</button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-bottom:10px;" id="inventoryGrid">
+            `;
+            
             data.items.forEach(item => {
                 const isPending = item.withdraw_status === 'pending';
+                const isSelected = selectedItems.has(item.id);
+                total += item.price;
+                
                 html += `
-                    <div class="inventory-item" style="border-color:${isPending ? '#ff6b6b' : 'rgba(255,255,255,0.06)'}">
-                        <span class="name">${item.name} ${isPending ? '<div style="font-size:11px;color:#ff6b6b;">⏳ Вывод (24ч)</div>' : ''}</span>
-                        <span class="price">${item.price} 🪙</span>
-                        <div class="actions">
-                            ${!isPending ? `<button class="btn-sell" onclick="sellItem(${item.id}, ${item.price})">${t('sell')}</button>` : ''}
-                            ${!isPending ? `<button class="btn-withdraw" onclick="withdrawItem(${item.id}, '${item.name}', ${item.price})">${t('withdraw')}</button>` : ''}
-                            ${isPending ? '<button class="btn-withdraw" style="opacity:0.5;cursor:not-allowed;">⏳</button>' : ''}
+                    <div class="inventory-item" style="border-color:${isPending ? '#ff6b6b' : isSelected ? '#ffd700' : 'rgba(255,255,255,0.06)'};flex-direction:column;align-items:stretch;padding:10px;position:relative;">
+                        ${!isPending ? `
+                            <div style="position:absolute;top:6px;left:6px;">
+                                <input type="checkbox" class="item-checkbox" data-id="${item.id}" style="width:18px;height:18px;accent-color:#00d4ff;display:none;cursor:pointer;">
+                            </div>
+                        ` : ''}
+                        <div style="font-size:13px;font-weight:500;color:#e0e0e0;padding-right:20px;">${item.name}</div>
+                        <div style="font-size:12px;color:#00d4ff;font-weight:600;">${item.price} 🪙</div>
+                        ${isPending ? '<div style="font-size:10px;color:#ff6b6b;">⏳ Вывод (24ч)</div>' : ''}
+                        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                            ${!isPending ? `<button class="btn-sell" onclick="sellItem(${item.id}, ${item.price})" style="flex:1;padding:4px 8px;font-size:11px;">${t('sell')}</button>` : ''}
+                            ${!isPending ? `<button class="btn-withdraw" onclick="withdrawItem(${item.id}, '${item.name}', ${item.price})" style="flex:1;padding:4px 8px;font-size:11px;">${t('withdraw')}</button>` : ''}
+                            ${isPending ? '<button class="btn-withdraw" style="opacity:0.5;cursor:not-allowed;flex:1;padding:4px 8px;font-size:11px;">⏳</button>' : ''}
                         </div>
                     </div>
                 `;
-                total += item.price;
             });
-            html += `<div style="padding:12px;text-align:center;"><button class="case-btn primary" onclick="sellAll()">${t('sell_all')} (${total} 🪙)</button></div>`;
+            
+            html += `</div>`;
             list.innerHTML = html;
+            
+            // Если есть предметы — показываем чекбоксы
+            if (data.items.length > 0 && !selectMode) {
+                document.querySelectorAll('.item-checkbox').forEach(el => el.style.display = 'none');
+            }
+            
+            // Обновляем чекбоксы
+            updateCheckboxes();
+            
+            if (tutorialActive && tutorialStep === 3) {
+                setTimeout(() => {
+                    tutorialStep = 4;
+                    showTutorialStep();
+                }, 1000);
+            }
+            
         } else {
             list.innerHTML = '<div style="text-align:center;color:#6a7a8e;padding:30px 0;">📭 Нет предметов! Откройте кейсы!</div>';
         }
@@ -1092,7 +1691,105 @@ function loadInventory() {
     .catch(() => list.innerHTML = '<div style="text-align:center;color:#ff4444;padding:30px 0;">❌ Ошибка соединения</div>');
 }
 
+function toggleSelectMode() {
+    selectMode = !selectMode;
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    const btn = document.getElementById('selectModeBtn');
+    const sellBtn = document.getElementById('sellSelectedBtn');
+    
+    if (selectMode) {
+        checkboxes.forEach(el => el.style.display = 'block');
+        if (btn) btn.textContent = '❌ ОТМЕНИТЬ ВЫБОР';
+        if (sellBtn) sellBtn.style.display = 'block';
+        showToast('✅ Выберите предметы для продажи', 'info', 3000);
+    } else {
+        checkboxes.forEach(el => el.style.display = 'none');
+        selectedItems.clear();
+        if (btn) btn.textContent = '✅ ВЫБРАТЬ';
+        if (sellBtn) sellBtn.style.display = 'none';
+        // Снимаем подсветку
+        document.querySelectorAll('.inventory-item').forEach(el => {
+            el.style.borderColor = 'rgba(255,255,255,0.06)';
+        });
+    }
+}
+
+function updateCheckboxes() {
+    document.querySelectorAll('.item-checkbox').forEach(el => {
+        el.checked = selectedItems.has(parseInt(el.dataset.id));
+        el.onchange = function() {
+            const id = parseInt(this.dataset.id);
+            if (this.checked) {
+                selectedItems.add(id);
+                this.closest('.inventory-item').style.borderColor = '#ffd700';
+            } else {
+                selectedItems.delete(id);
+                this.closest('.inventory-item').style.borderColor = 'rgba(255,255,255,0.06)';
+            }
+            updateSellSelectedBtn();
+        };
+    });
+    updateSellSelectedBtn();
+}
+
+function updateSellSelectedBtn() {
+    const sellBtn = document.getElementById('sellSelectedBtn');
+    if (sellBtn) {
+        const count = selectedItems.size;
+        if (count > 0) {
+            sellBtn.textContent = `💰 ПРОДАТЬ ВЫБРАННЫЕ (${count})`;
+            sellBtn.style.display = 'block';
+        } else {
+            sellBtn.textContent = '💰 ПРОДАТЬ ВЫБРАННЫЕ';
+            sellBtn.style.display = 'none';
+        }
+    }
+}
+
+function sellSelected() {
+    if (selectedItems.size === 0) {
+        showModal('❌ ОШИБКА', 'Выберите предметы для продажи');
+        return;
+    }
+    
+    const count = selectedItems.size;
+    if (!confirm(`Продать ${count} выбранных предметов?`)) return;
+    
+    let sold = 0;
+    let totalPrice = 0;
+    const itemsToSell = Array.from(selectedItems);
+    
+    itemsToSell.forEach((id, index) => {
+        fetch('/api/miniapp_sell_item', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: userId, item_id: id})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                sold++;
+                totalPrice += data.price;
+            }
+            // Если все проданы
+            if (sold + (itemsToSell.length - index - 1) === itemsToSell.length) {
+                // Это последний
+            }
+            if (index === itemsToSell.length - 1) {
+                loadBalance();
+                loadInventory();
+                showToast(`💰 Продано ${sold} предметов на ${totalPrice} 🪙`, 'success', 5000);
+                selectedItems.clear();
+                document.getElementById('sellSelectedBtn').style.display = 'none';
+                document.getElementById('selectModeBtn').textContent = '✅ ВЫБРАТЬ';
+                selectMode = false;
+            }
+        });
+    });
+}
+
 function sellItem(itemId, price) {
+    if (!confirm(`Продать этот предмет за ${price} 🪙?`)) return;
     if (tg) tg.HapticFeedback.impactOccurred('light');
     fetch('/api/miniapp_sell_item', {
         method: 'POST',
@@ -1104,7 +1801,11 @@ function sellItem(itemId, price) {
         if (data.success) {
             loadBalance();
             loadInventory();
-            showModal('💰 ПРОДАНО!', `+${price} 🪙`);
+            showToast(`💰 Продано! +${price} 🪙`, 'success', 5000);
+            if (tutorialActive && tutorialStep === 4) {
+                tutorialStep = 5;
+                setTimeout(showTutorialStep, 500);
+            }
         } else {
             showModal('❌ ОШИБКА', data.error || 'Не удалось продать');
         }
@@ -1112,6 +1813,7 @@ function sellItem(itemId, price) {
 }
 
 function sellAll() {
+    if (!confirm('Продать все предметы?')) return;
     if (tg) tg.HapticFeedback.impactOccurred('medium');
     fetch('/api/miniapp_sell_all', {
         method: 'POST',
@@ -1123,7 +1825,7 @@ function sellAll() {
         if (data.success) {
             loadBalance();
             loadInventory();
-            showModal('💰 ПРОДАНО ВСЁ!', `+${data.total} 🪙 за ${data.count} предметов`);
+            showToast(`💰 Продано всё! +${data.total} 🪙 за ${data.count} предметов`, 'success', 6000);
         } else {
             showModal('❌ ОШИБКА', data.error || 'Не удалось продать');
         }
@@ -1168,6 +1870,7 @@ function sendWithdrawRequest(itemId, name, price) {
     .then(data => {
         if (data.success) {
             closeModal();
+            showToast('✅ Заявка на вывод создана! У вас 24 часа для подтверждения.', 'success', 8000);
             showModal('✅ ЗАЯВКА ОТПРАВЛЕНА!', `
                 <div style="text-align:center;">
                     <div style="font-size:20px;font-weight:700;color:#00d4ff;">✅ Заявка создана!</div>
@@ -1264,6 +1967,10 @@ function loadProfile() {
         if (isAdminUser) {
             const adminPanel = document.getElementById('adminPanel');
             if (adminPanel) adminPanel.style.display = 'block';
+        }
+        if (tutorialActive && tutorialStep === 5) {
+            tutorialStep = 6;
+            setTimeout(showTutorialStep, 1000);
         }
     })
     .catch(err => {
@@ -1374,6 +2081,7 @@ function spinWheel() {
                 let msg = '';
                 if (result.type === 'coins') msg = `🎉 Вы выиграли ${result.value} 🪙!`;
                 else if (result.type === 'discount') msg = `🎉 Вы выиграли ${result.value}% скидку!`;
+                showToast(msg, 'success', 8000);
                 showModal('🎡 КОЛЕСО', `<div style="text-align:center;font-size:24px;color:#00d4ff;">${msg}</div>`);
                 loadBalance();
                 loadWheelStatus();
@@ -1481,9 +2189,11 @@ function startPvpBattle(battleId) {
                     document.getElementById('pvpSearchBtn').textContent = '🔍 НАЙТИ СОПЕРНИКА';
                     if (status.winner_id == userId) {
                         document.getElementById('pvpResult').textContent = `🏆 ПОБЕДА! +${status.price2} 🪙!`;
+                        showToast(`🏆 Победа в PVP! +${status.price2} 🪙`, 'success', 8000);
                         loadBalance();
                     } else {
                         document.getElementById('pvpResult').textContent = '💔 ПОРАЖЕНИЕ! Вы потеряли скин';
+                        showToast('💔 Поражение в PVP! Скин потерян', 'error', 6000);
                         loadBalance();
                     }
                 }
@@ -1492,7 +2202,7 @@ function startPvpBattle(battleId) {
     });
 }
 
-// ============ ТОП ИГРОКОВ ============
+// ============ ТОП ============
 function loadTopPlayers() {
     const list = document.getElementById('topList');
     const userPlace = document.getElementById('userPlace');
@@ -1605,7 +2315,7 @@ function sendFriendRequest(friendId) {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showModal('✅ ЗАЯВКА ОТПРАВЛЕНА', 'Заявка в друзья отправлена!');
+            showToast('✅ Заявка в друзья отправлена!', 'success', 5000);
             searchFriends();
         } else {
             showModal('❌ ОШИБКА', data.error);
@@ -1622,7 +2332,7 @@ function acceptFriendRequest(friendId) {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showModal('✅ ДРУГ ДОБАВЛЕН!', data.message);
+            showToast(`✅ ${data.username || 'Пользователь'} теперь в друзьях!`, 'success', 5000);
             searchFriends();
             loadFriends();
         } else {
@@ -1641,7 +2351,7 @@ function removeFriend(friendId) {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showModal('✅ УДАЛЁН', 'Друг удалён');
+            showToast('❌ Друг удалён', 'info', 3000);
             searchFriends();
             loadFriends();
         } else {
@@ -1697,6 +2407,10 @@ function loadFriends() {
             requestsList.innerHTML = html;
         } else {
             requestsList.innerHTML = '<div style="color:#6a7a8e;padding:8px 0;">📩 Нет заявок</div>';
+        }
+        if (tutorialActive && tutorialStep === 6) {
+            tutorialStep = 7;
+            setTimeout(showTutorialStep, 500);
         }
     })
     .catch(() => {
@@ -1798,7 +2512,7 @@ function activatePromo() {
     .then(data => {
         if (data.success) {
             closeModal();
-            showModal('🎉 УСПЕХ!', `+${data.reward} 🪙`);
+            showToast(`🎫 Промокод активирован! +${data.reward} 🪙`, 'success', 6000);
             loadBalance();
         } else {
             showModal('❌ ОШИБКА', data.error);
@@ -1973,9 +2687,9 @@ function executeUpgrade() {
         if (data.success) {
             const success = data.upgraded;
             
-            // === АНИМАЦИЯ АПГРЕЙДА ===
             new UpgradeAnimation(success, () => {
                 if (success) {
+                    showToast(`🎉 Апгрейд успешен! +${data.target_name} (${data.target_price} 🪙)`, 'success', 8000);
                     showModal('🎉 АПГРЕЙД УСПЕШЕН!', `
                         <div style="text-align:center;padding:10px 0;">
                             <div style="font-size:48px;margin:10px 0;">🎉</div>
@@ -1986,6 +2700,7 @@ function executeUpgrade() {
                         </div>
                     `);
                 } else {
+                    showToast(`💔 Апгрейд не удался! Предмет сгорел (-${data.lost_item} 🪙)`, 'error', 6000);
                     showModal('💔 АПГРЕЙД НЕ УДАЛСЯ', `
                         <div style="text-align:center;padding:10px 0;">
                             <div style="font-size:48px;margin:10px 0;">💔</div>
@@ -2009,7 +2724,7 @@ function executeUpgrade() {
     });
 }
 
-// ============ АДМИН-ПАНЕЛЬ (С ПАРОЛЕМ) ============
+// ============ АДМИН-ПАНЕЛЬ ============
 function loadAdminPanel() {
     const content = document.getElementById('adminContent');
     if (!content) return;
@@ -2183,6 +2898,7 @@ function submitPasswordChange() {
 }
 
 // ============ АДМИН-ФУНКЦИИ ============
+
 function adminUsers() {
     fetch('/api/admin/users')
     .then(res => res.json())
@@ -2539,16 +3255,51 @@ function adminDeleteUser() { showAdminConfirm('Введите ID игрока', 
 }); }
 
 function adminBroadcast() {
-    const msg = prompt('Введите текст рассылки:');
+    const msg = prompt('📢 Введите текст рассылки:');
     if (!msg) return;
-    fetch('/api/admin/broadcast', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})})
-    .then(res => res.json()).then(data => document.getElementById('adminInfo').textContent = data.success ? `✅ Отправлено ${data.count} пользователям!` : '❌ Ошибка');
+    if (!confirm(`Отправить рассылку всем пользователям?\n\nТекст: "${msg}"`)) return;
+    fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('adminInfo').innerHTML = `
+                <div style="color:#00d4ff;padding:8px 0;">✅ Рассылка отправлена ${data.count} пользователям!</div>
+                <div style="color:#6a7a8e;font-size:13px;padding:4px 0;">Текст: "${msg}"</div>
+            `;
+        } else {
+            document.getElementById('adminInfo').innerHTML = `<div style="color:#ff4444;">❌ Ошибка: ${data.error || 'Не удалось отправить'}</div>`;
+        }
+    })
+    .catch(() => document.getElementById('adminInfo').innerHTML = '<div style="color:#ff4444;">❌ Ошибка соединения</div>');
 }
 
-function adminPersonalBroadcast() { showAdminConfirm('Введите ID игрока', 'Введите текст сообщения', (uid, msg) => {
-    fetch('/api/admin/personal_broadcast', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:parseInt(uid), message:msg})})
-    .then(res => res.json()).then(data => document.getElementById('adminInfo').textContent = data.success ? '✅ Отправлено!' : '❌ Ошибка');
-}); }
+function adminPersonalBroadcast() { 
+    showAdminConfirm('Введите ID игрока', 'Введите текст сообщения', (uid, msg) => {
+        if (!msg) return;
+        if (!confirm(`Отправить личное сообщение пользователю ${uid}?\n\nТекст: "${msg}"`)) return;
+        fetch('/api/admin/personal_broadcast', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: parseInt(uid), message: msg})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('adminInfo').innerHTML = `
+                    <div style="color:#00d4ff;padding:8px 0;">✅ Личное сообщение отправлено пользователю ${uid}!</div>
+                    <div style="color:#6a7a8e;font-size:13px;padding:4px 0;">Текст: "${msg}"</div>
+                `;
+            } else {
+                document.getElementById('adminInfo').innerHTML = `<div style="color:#ff4444;">❌ Ошибка: ${data.error || 'Не удалось отправить'}</div>`;
+            }
+        })
+        .catch(() => document.getElementById('adminInfo').innerHTML = '<div style="color:#ff4444;">❌ Ошибка соединения</div>');
+    });
+}
 
 function adminTogglePVP() {
     fetch('/api/admin/toggle_pvp', {method:'POST'})
