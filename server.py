@@ -322,7 +322,6 @@ def init_db():
             reward INTEGER,
             uses_left INTEGER,
             created_by INTEGER,
-            target_user INTEGER DEFAULT 0,
             created_at TEXT,
             is_active INTEGER DEFAULT 1
         )''')
@@ -385,6 +384,21 @@ def init_db():
             status TEXT DEFAULT 'pending',
             created_at TEXT,
             UNIQUE(user_id, friend_id)
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS broadcasts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT,
+            created_at TEXT,
+            expires_at TEXT
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS broadcast_reads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            broadcast_id INTEGER,
+            user_id INTEGER,
+            read_at TEXT,
+            UNIQUE(broadcast_id, user_id)
         )''')
         
         c.execute("INSERT OR IGNORE INTO cases (name, price, max_item_price, jackpot_chance) VALUES ('bomj', 500, 5000, 1.0)")
@@ -493,7 +507,7 @@ def miniapp_profile():
         with db_pool.get_connection() as conn:
             c = conn.cursor()
             
-            # === АВТОРАЗМОРОЗКА ===
+            # Авторазморозка
             user_check = c.execute("SELECT coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
             if user_check and user_check[1] == 1 and user_check[0] >= 0:
                 c.execute("UPDATE users SET is_frozen=0 WHERE id=?", (user_id,))
@@ -651,13 +665,11 @@ def promo_activate():
             user = c.execute("SELECT is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
             if user and user[0] == 1:
                 return jsonify({"error": "Account frozen"}), 400
-            promo = c.execute("SELECT reward, uses_left, target_user, is_active FROM promocodes WHERE code=?", (code,)).fetchone()
-            if not promo or promo[3] == 0:
+            promo = c.execute("SELECT reward, uses_left, is_active FROM promocodes WHERE code=?", (code,)).fetchone()
+            if not promo or promo[2] == 0:
                 return jsonify({"error": "Неверный промокод"}), 400
             if promo[1] <= 0:
                 return jsonify({"error": "Промокод использован"}), 400
-            if promo[2] != 0 and promo[2] != user_id:
-                return jsonify({"error": "Это не ваш промокод"}), 400
             used = c.execute("SELECT COUNT(*) FROM promo_usage WHERE user_id=? AND code=?", (user_id, code)).fetchone()[0]
             if used > 0:
                 return jsonify({"error": "Вы уже использовали этот промокод"}), 400
@@ -768,7 +780,54 @@ def refund_request():
 
 # ============ НОВЫЕ API ============
 
-# 1. ТОП ИГРОКОВ
+# 1. ПОСЛЕДНИЕ ДРОПЫ
+@app.route('/api/recent_drops', methods=['GET'])
+def recent_drops():
+    try:
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            yesterday = (datetime.now() - timedelta(hours=24)).isoformat()
+            
+            c.execute('''
+                SELECT 
+                    i.item_name,
+                    i.item_price,
+                    i.opened_at,
+                    u.username,
+                    u.id as user_id
+                FROM inventory i
+                JOIN users u ON i.user_id = u.id
+                WHERE i.opened_at > ?
+                ORDER BY i.opened_at DESC
+                LIMIT 50
+            ''', (yesterday,))
+            
+            items = c.fetchall()
+            
+            result = []
+            for row in items:
+                username = row[3] or 'Player'
+                avatar_letter = username[0].upper()
+                
+                colors = ['#ffd700', '#f5a623', '#e8a800', '#ff6b35', '#ff4444', '#ff8844', '#ffaa44', '#ffcc44']
+                color_index = len(username) % len(colors)
+                
+                result.append({
+                    'item_name': row[0],
+                    'item_price': row[1],
+                    'opened_at': row[2],
+                    'username': username,
+                    'user_id': row[4],
+                    'avatar_letter': avatar_letter,
+                    'avatar_color': colors[color_index]
+                })
+            
+            return jsonify({'drops': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# 2. ТОП ИГРОКОВ
 @app.route('/api/top_players', methods=['GET'])
 def top_players():
     try:
@@ -831,120 +890,6 @@ def top_players():
                     }
             
             return jsonify({'top': top_list, 'user': user_place})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# 2. АЧИВКИ
-@app.route('/api/achievements', methods=['GET'])
-def get_achievements():
-    try:
-        user_id = request.args.get('user_id')
-        with db_pool.get_connection() as conn:
-            c = conn.cursor()
-            
-            user = c.execute('''
-                SELECT coins, level, pvp_wins, 
-                       (SELECT COUNT(*) FROM inventory WHERE user_id = ?) as items_count,
-                       (SELECT COUNT(*) FROM users WHERE referred_by = ?) as referrals
-                FROM users WHERE id = ?
-            ''', (user_id, user_id, user_id)).fetchone()
-            
-            if not user:
-                return jsonify({'error': 'User not found'}), 404
-            
-            coins, level, wins, items, referrals = user
-            
-            unlocked = c.execute('SELECT achievement_id FROM user_achievements WHERE user_id = ?', (user_id,)).fetchall()
-            unlocked_set = {row[0] for row in unlocked}
-            
-            achievements = []
-            
-            coin_targets = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 5000000]
-            for i, target in enumerate(coin_targets, 1):
-                done = coins >= target
-                achievements.append({
-                    'id': i,
-                    'name': f'💰 Богач {i}',
-                    'description': f'Накопить {target} 🪙',
-                    'reward': target // 10,
-                    'done': done or i in unlocked_set,
-                    'progress': min(coins, target),
-                    'target': target
-                })
-                if done and i not in unlocked_set:
-                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
-                              (user_id, i, datetime.now().isoformat()))
-            
-            level_targets = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100]
-            for i, target in enumerate(level_targets, 1):
-                ach_id = i + 10
-                done = level >= target
-                achievements.append({
-                    'id': ach_id,
-                    'name': f'⭐ Мастер {i}',
-                    'description': f'Достичь {target} уровня',
-                    'reward': target * 100,
-                    'done': done or ach_id in unlocked_set,
-                    'progress': min(level, target),
-                    'target': target
-                })
-                if done and ach_id not in unlocked_set:
-                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
-                              (user_id, ach_id, datetime.now().isoformat()))
-            
-            win_targets = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
-            for i, target in enumerate(win_targets, 1):
-                ach_id = i + 20
-                done = wins >= target
-                achievements.append({
-                    'id': ach_id,
-                    'name': f'⚔️ Воин {i}',
-                    'description': f'Одержать {target} побед в PVP',
-                    'reward': target * 20,
-                    'done': done or ach_id in unlocked_set,
-                    'progress': min(wins, target),
-                    'target': target
-                })
-                if done and ach_id not in unlocked_set:
-                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
-                              (user_id, ach_id, datetime.now().isoformat()))
-            
-            item_targets = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
-            for i, target in enumerate(item_targets, 1):
-                ach_id = i + 30
-                done = items >= target
-                achievements.append({
-                    'id': ach_id,
-                    'name': f'📦 Коллекционер {i}',
-                    'description': f'Собрать {target} предметов',
-                    'reward': target * 5,
-                    'done': done or ach_id in unlocked_set,
-                    'progress': min(items, target),
-                    'target': target
-                })
-                if done and ach_id not in unlocked_set:
-                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
-                              (user_id, ach_id, datetime.now().isoformat()))
-            
-            ref_targets = [1, 3, 5, 10, 25, 50, 100, 250, 500, 1000]
-            for i, target in enumerate(ref_targets, 1):
-                ach_id = i + 40
-                done = referrals >= target
-                achievements.append({
-                    'id': ach_id,
-                    'name': f'👥 Лидер {i}',
-                    'description': f'Пригласить {target} друзей',
-                    'reward': target * 50,
-                    'done': done or ach_id in unlocked_set,
-                    'progress': min(referrals, target),
-                    'target': target
-                })
-                if done and ach_id not in unlocked_set:
-                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
-                              (user_id, ach_id, datetime.now().isoformat()))
-            
-            conn.commit()
-            return jsonify({'achievements': achievements, 'total': len(achievements)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1336,7 +1281,330 @@ def admin_change_password():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# 6. РАССЫЛКА
+@app.route('/api/admin/broadcast', methods=['POST'])
+def admin_broadcast():
+    try:
+        data = request.get_json()
+        message = data.get('message')
+        expires_hours = 24
+        
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            expires_at = (datetime.now() + timedelta(hours=expires_hours)).isoformat()
+            c.execute('''
+                INSERT INTO broadcasts (message, created_at, expires_at)
+                VALUES (?, ?, ?)
+            ''', (message, datetime.now().isoformat(), expires_at))
+            broadcast_id = c.lastrowid
+            
+            users = c.execute("SELECT id FROM users").fetchall()
+            
+            return jsonify({
+                'success': True,
+                'broadcast_id': broadcast_id,
+                'count': len(users),
+                'expires_at': expires_at,
+                'message': f'Рассылка отправлена {len(users)} пользователям!'
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/get_broadcasts', methods=['GET'])
+def get_broadcasts():
+    try:
+        user_id = request.args.get('user_id')
+        now = datetime.now().isoformat()
+        
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            broadcasts = c.execute('''
+                SELECT b.id, b.message, b.created_at, b.expires_at
+                FROM broadcasts b
+                LEFT JOIN broadcast_reads br ON b.id = br.broadcast_id AND br.user_id = ?
+                WHERE br.id IS NULL
+                  AND b.expires_at > ?
+                ORDER BY b.created_at DESC
+            ''', (user_id, now))
+            
+            result = []
+            for row in broadcasts:
+                result.append({
+                    'id': row[0],
+                    'message': row[1],
+                    'created_at': row[2],
+                    'expires_at': row[3]
+                })
+            
+            return jsonify({'broadcasts': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/mark_broadcast_read', methods=['POST'])
+def mark_broadcast_read():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        broadcast_id = data.get('broadcast_id')
+        
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute('''
+                INSERT OR IGNORE INTO broadcast_reads (broadcast_id, user_id, read_at)
+                VALUES (?, ?, ?)
+            ''', (broadcast_id, user_id, datetime.now().isoformat()))
+            
+            return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============ 100 АЧИВОК ============
+
+@app.route('/api/achievements', methods=['GET'])
+def get_achievements():
+    try:
+        user_id = request.args.get('user_id')
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            
+            user = c.execute('''
+                SELECT 
+                    coins, level, exp, pvp_wins, pvp_losses,
+                    (SELECT COUNT(*) FROM inventory WHERE user_id = ?) as items_count,
+                    (SELECT COUNT(*) FROM users WHERE referred_by = ?) as referrals,
+                    (SELECT COUNT(*) FROM friends WHERE user_id = ? AND status = 'accepted') as friends_count,
+                    (SELECT COUNT(*) FROM friends WHERE user_id = ? AND status = 'pending') as friend_requests,
+                    (SELECT COUNT(*) FROM inventory WHERE user_id = ? AND opened_at IS NOT NULL) as cases_opened
+                FROM users WHERE id = ?
+            ''', (user_id, user_id, user_id, user_id, user_id, user_id)).fetchone()
+            
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            coins, level, exp, wins, losses, items, referrals, friends_count, friend_requests, cases_opened = user
+            
+            unlocked = c.execute('SELECT achievement_id FROM user_achievements WHERE user_id = ?', (user_id,)).fetchall()
+            unlocked_set = {row[0] for row in unlocked}
+            
+            achievements = []
+            newly_unlocked = []
+            
+            # ============ 1-15: 💰 БОГАТСТВО ============
+            coin_targets = [500, 1000, 5000, 10000, 25000, 50000, 75000, 100000, 200000, 350000, 500000, 750000, 1000000, 2500000, 5000000]
+            for i, target in enumerate(coin_targets, 1):
+                ach_id = i
+                done = coins >= target
+                ach = {
+                    'id': ach_id,
+                    'group': '💰 Богатство',
+                    'name': f'💰 Богач {i}',
+                    'description': f'Накопить {target} 🪙',
+                    'reward': target // 10,
+                    'done': done or ach_id in unlocked_set,
+                    'progress': min(coins, target),
+                    'target': target
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            # ============ 16-30: ⭐ ПРОГРЕСС ============
+            level_targets = [2, 3, 5, 7, 10, 13, 16, 20, 25, 30, 35, 40, 50, 60, 75]
+            for i, target in enumerate(level_targets, 1):
+                ach_id = i + 15
+                done = level >= target
+                ach = {
+                    'id': ach_id,
+                    'group': '⭐ Прогресс',
+                    'name': f'⭐ Мастер {i}',
+                    'description': f'Достичь {target} уровня',
+                    'reward': target * 100,
+                    'done': done or ach_id in unlocked_set,
+                    'progress': min(level, target),
+                    'target': target
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            # ============ 31-45: ⚔️ БОЕЦ ============
+            win_targets = [1, 3, 5, 10, 15, 25, 40, 60, 80, 100, 150, 200, 300, 500, 1000]
+            for i, target in enumerate(win_targets, 1):
+                ach_id = i + 30
+                done = wins >= target
+                ach = {
+                    'id': ach_id,
+                    'group': '⚔️ Боец',
+                    'name': f'⚔️ Воин {i}',
+                    'description': f'Одержать {target} побед в PVP',
+                    'reward': target * 20,
+                    'done': done or ach_id in unlocked_set,
+                    'progress': min(wins, target),
+                    'target': target
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            # ============ 46-60: 📦 КОЛЛЕКЦИОНЕР ============
+            item_targets = [1, 5, 10, 20, 35, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 2500]
+            for i, target in enumerate(item_targets, 1):
+                ach_id = i + 45
+                done = items >= target
+                ach = {
+                    'id': ach_id,
+                    'group': '📦 Коллекционер',
+                    'name': f'📦 Коллекционер {i}',
+                    'description': f'Собрать {target} предметов',
+                    'reward': target * 5,
+                    'done': done or ach_id in unlocked_set,
+                    'progress': min(items, target),
+                    'target': target
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            # ============ 61-75: 👥 ДРУЗЬЯ ============
+            friend_targets = [1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200]
+            for i, target in enumerate(friend_targets, 1):
+                ach_id = i + 60
+                done = friends_count >= target
+                ach = {
+                    'id': ach_id,
+                    'group': '👥 Друзья',
+                    'name': f'👥 Друг {i}',
+                    'description': f'Добавить {target} друзей',
+                    'reward': target * 50,
+                    'done': done or ach_id in unlocked_set,
+                    'progress': min(friends_count, target),
+                    'target': target
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            # ============ 76-90: 🎁 ОТКРЫТИЯ ============
+            case_targets = [1, 5, 10, 20, 35, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 2500]
+            for i, target in enumerate(case_targets, 1):
+                ach_id = i + 75
+                done = cases_opened >= target
+                ach = {
+                    'id': ach_id,
+                    'group': '🎁 Открытия',
+                    'name': f'🎁 Открыватель {i}',
+                    'description': f'Открыть {target} кейсов',
+                    'reward': target * 10,
+                    'done': done or ach_id in unlocked_set,
+                    'progress': min(cases_opened, target),
+                    'target': target
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            # ============ 91-100: 🏆 ОСОБЫЕ ============
+            special_achievements = [
+                {'name': '🏆 Первый шаг', 'description': 'Зайти в игру', 'reward': 100, 'check': lambda: True},
+                {'name': '🏆 Реферал', 'description': 'Пригласить 1 друга', 'reward': 200, 'check': lambda: referrals >= 1},
+                {'name': '🏆 Массовый реферал', 'description': 'Пригласить 10 друзей', 'reward': 1000, 'check': lambda: referrals >= 10},
+                {'name': '🏆 Победитель', 'description': 'Выиграть 50 PVP-битв', 'reward': 1500, 'check': lambda: wins >= 50},
+                {'name': '🏆 Легенда', 'description': 'Достичь 100 уровня', 'reward': 5000, 'check': lambda: level >= 100},
+                {'name': '🏆 Миллионер', 'description': 'Накопить 1 000 000 🪙', 'reward': 10000, 'check': lambda: coins >= 1000000},
+                {'name': '🏆 Коллекционер', 'description': 'Собрать 1000 предметов', 'reward': 5000, 'check': lambda: items >= 1000},
+                {'name': '🏆 Друг года', 'description': 'Добавить 100 друзей', 'reward': 3000, 'check': lambda: friends_count >= 100},
+                {'name': '🏆 Открыватель', 'description': 'Открыть 1000 кейсов', 'reward': 5000, 'check': lambda: cases_opened >= 1000},
+                {'name': '🏆 Бог войны', 'description': 'Выиграть 1000 PVP-битв', 'reward': 10000, 'check': lambda: wins >= 1000}
+            ]
+            
+            for i, special in enumerate(special_achievements, 1):
+                ach_id = i + 90
+                done = special['check']()
+                ach = {
+                    'id': ach_id,
+                    'group': '🏆 Особые',
+                    'name': special['name'],
+                    'description': special['description'],
+                    'reward': special['reward'],
+                    'done': done or ach_id in unlocked_set,
+                    'progress': 1 if done else 0,
+                    'target': 1
+                }
+                achievements.append(ach)
+                if done and ach_id not in unlocked_set:
+                    newly_unlocked.append(ach)
+                    c.execute('INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)',
+                              (user_id, ach_id, datetime.now().isoformat()))
+            
+            conn.commit()
+            
+            return jsonify({
+                'achievements': achievements,
+                'total': len(achievements),
+                'newly_unlocked': [{'name': a['name'], 'reward': a['reward']} for a in newly_unlocked]
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============ PVP-БИТВЫ ============
+
+@app.route('/api/pvp_find', methods=['POST'])
+def pvp_find():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        case_name = data.get('case_name')
+        price = get_case_price(case_name)
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            coins = c.execute("SELECT coins, is_frozen FROM users WHERE id=?", (user_id,)).fetchone()
+            if not coins or coins[0] < price:
+                return jsonify({"error": f"Need {price} coins"}), 400
+            if coins[1] == 1:
+                return jsonify({"error": "Account frozen"}), 400
+        battle_id = random.randint(100000, 999999)
+        return jsonify({"waiting": True, "battle_id": battle_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/pvp_start', methods=['POST'])
+def pvp_start():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        case_name = data.get('case_name')
+        price = get_case_price(case_name)
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE users SET coins=coins-? WHERE id=?", (price, user_id))
+        item_name, item_price = open_case_by_name(case_name)
+        return jsonify({"skin": item_name, "price": item_price})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/pvp_status', methods=['GET'])
+def pvp_status():
+    try:
+        battle_id = request.args.get('battle_id')
+        return jsonify({"status": "active", "winner_id": None})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ============ АДМИН-ФУНКЦИИ ============
+
 @app.route('/api/admin/users', methods=['GET'])
 def admin_users():
     with db_pool.get_connection() as conn:
@@ -1754,28 +2022,6 @@ def admin_reject_withdraw():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/admin/broadcast', methods=['POST'])
-def admin_broadcast():
-    try:
-        data = request.get_json()
-        message = data.get('message')
-        with db_pool.get_connection() as conn:
-            c = conn.cursor()
-            users = c.execute("SELECT id FROM users").fetchall()
-        return jsonify({"success": True, "count": len(users)})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/admin/personal_broadcast', methods=['POST'])
-def admin_personal_broadcast():
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        message = data.get('message')
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/admin/toggle_pvp', methods=['POST'])
 def admin_toggle_pvp():
     try:
@@ -1986,6 +2232,46 @@ def admin_delete_user():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/create_promo', methods=['POST'])
+def admin_create_promo():
+    try:
+        data = request.get_json()
+        code = data.get('code').upper()
+        reward = data.get('reward')
+        uses = data.get('uses')
+        created_by = data.get('user_id')
+        
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            existing = c.execute("SELECT code FROM promocodes WHERE code=?", (code,)).fetchone()
+            if existing:
+                return jsonify({"error": "Промокод уже существует"}), 400
+            c.execute("INSERT INTO promocodes (code, reward, uses_left, created_by, created_at, is_active) VALUES (?,?,?,?,?,?)",
+                      (code, reward, uses, created_by, datetime.now().isoformat(), 1))
+        return jsonify({"success": True, "message": f"Промокод {code} создан!"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/deactivate_promo', methods=['POST'])
+def admin_deactivate_promo():
+    try:
+        data = request.get_json()
+        code = data.get('code').upper()
+        with db_pool.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE promocodes SET is_active=0 WHERE code=?", (code,))
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/promo_stats', methods=['GET'])
+def admin_promo_stats():
+    with db_pool.get_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT code, reward, uses_left, created_at FROM promocodes ORDER BY created_at DESC")
+        promos = c.fetchall()
+        return jsonify({"promos": [{"code": p[0], "reward": p[1], "uses_left": p[2], "created_at": p[3]} for p in promos]})
 
 @app.route('/api/admin/add_skin_to_case', methods=['POST'])
 def admin_add_skin_to_case():
