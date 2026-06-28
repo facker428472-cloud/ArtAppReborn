@@ -9,7 +9,9 @@ let pvpCases = [
     {name: 'bomj', label: '🥫 BOMJ (500)', price: 500},
     {name: 'berkut', label: '🦅 BERKUT (1500)', price: 1500},
     {name: 'champion', label: '🏆 CHAMPION (5000)', price: 5000},
-    {name: 'draft', label: '📦 DRAFT (7000)', price: 7000}
+    {name: 'draft', label: '📦 DRAFT (7000)', price: 7000},
+    {name: 'm0nesy', label: '🧙 M0NESY (10000)', price: 10000},
+    {name: 'donk', label: '💀 DONK (15000)', price: 15000}
 ];
 let tg = window.Telegram ? window.Telegram.WebApp : null;
 let dailyRewardClaimed = false;
@@ -322,10 +324,18 @@ function updateLanguage() {
 function loginOrRegister(uid, uname) {
     console.log('Login attempt:', uid, uname);
     
+    // Получаем реферальный код из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const refCode = urlParams.get('ref');
+    
     fetch('/api/miniapp_login', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({user_id: uid, username: uname})
+        body: JSON.stringify({
+            user_id: uid,
+            username: uname,
+            ref_code: refCode
+        })
     })
     .then(res => res.json())
     .then(data => {
@@ -347,10 +357,14 @@ function loginOrRegister(uid, uname) {
             checkWithdrawStatus();
             checkNotifications();
             loadRecentDrops();
+            checkPrimeStatus();
             
             setTimeout(() => startTutorial(), 1500);
             setInterval(updateOnlineStatus, 30000);
             setInterval(checkNotifications, 10000);
+            
+            // Показываем модалку с рекламой канала
+            setTimeout(showSubscribeModal, 2000);
         } else {
             console.error('Login failed:', data.error);
         }
@@ -473,6 +487,7 @@ function loadBalance() {
         const coins = data.coins || 0;
         const isFrozen = data.is_frozen || 0;
         const level = data.level || 1;
+        const isPrime = data.is_prime || false;
         
         document.querySelectorAll('.balance span:last-child').forEach(el => {
             el.textContent = coins;
@@ -491,6 +506,11 @@ function loadBalance() {
             showToast(`🎉 Новый уровень! Ты достиг ${level} уровня! 🎉`, 'success', 10000);
         }
         localStorage.setItem('lastLevel', level.toString());
+        
+        // Обновляем статус прайма
+        if (isPrime) {
+            document.querySelectorAll('.prime-badge').forEach(el => el.style.display = 'inline');
+        }
     })
     .catch(err => console.error('Balance error:', err));
 }
@@ -667,6 +687,37 @@ function rejectFriendRequestFromToast(friendId) {
     document.querySelectorAll('#toastContainer > div').forEach(el => el.remove());
 }
 
+// ============ РЕКЛАМНАЯ МОДАЛКА ============
+
+function showSubscribeModal() {
+    // Показываем раз в день
+    const lastShown = localStorage.getItem('subscribe_modal_shown');
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (lastShown === today) return;
+    
+    localStorage.setItem('subscribe_modal_shown', today);
+    
+    showModal('🍄 ПОДПИШИСЬ НА КАНАЛ!', `
+        <div style="text-align:center;padding:10px 0;">
+            <div style="font-size:48px;margin:10px 0;">🍄</div>
+            <div style="font-size:20px;font-weight:700;color:#ffd700;">ГРИБ | Халява CS2</div>
+            <div style="color:#c0c0c0;font-size:14px;padding:8px 0;">
+                Бесплатные кейсы, розыгрыши и халява каждый день!
+            </div>
+            <button class="case-btn primary" onclick="window.open('https://t.me/GRIB_FREE', '_blank')">
+                📺 ПЕРЕЙТИ В КАНАЛ
+            </button>
+            <button class="case-btn" onclick="closeModal()" style="background:rgba(255,255,255,0.05);">
+                ❌ ПРОПУСТИТЬ
+            </button>
+            <div style="font-size:11px;color:#6a7a8e;margin-top:8px;">
+                Показывается раз в день
+            </div>
+        </div>
+    `);
+}
+
 // ============ ПРОВЕРКА УВЕДОМЛЕНИЙ ============
 
 function checkNotifications() {
@@ -676,7 +727,7 @@ function checkNotifications() {
     .then(res => res.json())
     .then(data => {
         if (data.unlocked_achievement) {
-            showToast(`🏅 Ты получил достижение "${data.unlocked_achievement}" и получил ${data.achievement_reward} 🪙!`, 'achievement', 10000);
+            showToast(`🏅 Ты получил достижение! Зайди в раздел "Достижения" чтобы забрать награду!`, 'achievement', 10000);
         }
         
         const currentLevel = localStorage.getItem('lastLevel');
@@ -693,7 +744,13 @@ function checkNotifications() {
     .then(data => {
         if (data.broadcasts && data.broadcasts.length > 0) {
             data.broadcasts.forEach(b => {
-                showToast(`📨 ${b.message}`, 'info', 10000);
+                // Показываем как модалку, а не тост
+                showModal('📢 РАССЫЛКА', `
+                    <div style="padding:10px 0;text-align:center;">
+                        <div style="font-size:16px;color:#c0c0c0;line-height:1.6;white-space:pre-wrap;padding:8px 0;">${b.message}</div>
+                        <button class="case-btn primary" onclick="closeModal()">✅ ЗАКРЫТЬ</button>
+                    </div>
+                `);
                 fetch('/api/mark_broadcast_read', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -705,66 +762,42 @@ function checkNotifications() {
     .catch(() => {});
 }
 
-// ============ ИНТЕРАКТИВНОЕ ОБУЧЕНИЕ ============
+// ============ ПРАЙМ-ПОДПИСКА ============
 
-const TUTORIAL_STEPS = [
-    {
-        id: 'welcome',
-        title: '👋 ДОБРО ПОЖАЛОВАТЬ!',
-        text: 'Это ArtDrop — кейс-открыватор в Telegram!\n\nДавай я покажу тебе, как всё работает. Начнём с самого главного — с открытия кейсов!',
-        action: 'open_cases',
-        button: '🎁 ОТКРЫТЬ КЕЙСЫ',
-        target: 'cases'
-    },
-    {
-        id: 'open_case',
-        title: '🎁 ОТКРОЙ КЕЙС!',
-        text: 'Нажми на кнопку "🥫 BOMJ" — это самый дешёвый кейс. У тебя хватит монет, чтобы открыть его!',
-        action: 'click_case',
-        button: '🥫 ОТКРЫТЬ BOMJ',
-        target: 'bomj'
-    },
-    {
-        id: 'case_result',
-        title: '🎉 ТЫ ОТКРЫЛ КЕЙС!',
-        text: 'Поздравляю! Теперь у тебя есть скин. Давай посмотрим, что с ним можно сделать.',
-        action: 'go_inventory',
-        button: '📦 ПЕРЕЙТИ В ИНВЕНТАРЬ',
-        target: 'inventory'
-    },
-    {
-        id: 'sell_item',
-        title: '💰 ПРОДАЙ СКИН!',
-        text: 'Нажми кнопку "ПРОДАТЬ" рядом со скином, который ты только что получил. Так ты получишь монеты!',
-        action: 'click_sell',
-        button: '💰 ПРОДАТЬ СКИН',
-        target: 'sell'
-    },
-    {
-        id: 'go_profile',
-        title: '👤 ПРОВЕРЬ ПРОФИЛЬ!',
-        text: 'Теперь зайди в профиль — там видно твой баланс, уровень и статистику. Нажми на аватарку в правом верхнем углу!',
-        action: 'open_profile',
-        button: '👤 ОТКРЫТЬ ПРОФИЛЬ',
-        target: 'profile'
-    },
-    {
-        id: 'go_friends',
-        title: '👥 ДРУЗЬЯ',
-        text: 'В профиле есть вкладка "Друзья". Там ты можешь добавлять друзей и смотреть их инвентарь. Попробуй найти кого-нибудь!',
-        action: 'open_friends',
-        button: '👥 ОТКРЫТЬ ДРУЗЕЙ',
-        target: 'friends'
-    },
-    {
-        id: 'final',
-        title: '🎉 ТЫ ГОТОВ!',
-        text: 'Теперь ты знаешь основы ArtDrop!\n\nОстальное ты освоишь по ходу игры. Удачи! 🚀',
-        action: 'finish',
-        button: '✅ НАЧАТЬ ИГРУ!',
-        target: 'main'
-    }
-];
+function checkPrimeStatus() {
+    fetch(`/api/prime/status?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.is_prime) {
+            document.querySelectorAll('.prime-badge').forEach(el => el.style.display = 'inline');
+        }
+    })
+    .catch(() => {});
+}
+
+function subscribePrime() {
+    showModal('👑 ПРАЙМ-ПОДПИСКА', `
+        <div style="text-align:center;padding:10px 0;">
+            <div style="font-size:48px;margin:10px 0;">👑</div>
+            <div style="font-size:20px;font-weight:700;color:#ffd700;">Прайм-подписка</div>
+            <div style="color:#c0c0c0;font-size:14px;padding:8px 0;">
+                <div>💰 Цена: <strong>115 RUB</strong> в месяц</div>
+                <div style="margin-top:8px;">🎁 <strong>Бесплатный кейс</strong> каждую неделю!</div>
+                <div>👑 <strong>Корона</strong> в профиле</div>
+                <div>⭐ <strong>Приоритетная</strong> поддержка</div>
+            </div>
+            <div style="color:#6a7a8e;font-size:12px;padding:8px 0;">
+                Для оплаты напишите в поддержку @ArtCSbotSupp
+            </div>
+            <button class="case-btn primary" onclick="window.open('https://t.me/ArtCSbotSupp', '_blank')">
+                📩 НАПИСАТЬ В ПОДДЕРЖКУ
+            </button>
+            <button class="case-btn" onclick="closeModal()">❌ ЗАКРЫТЬ</button>
+        </div>
+    `);
+}
+
+// ============ ОБУЧЕНИЕ ============
 
 function startTutorial() {
     const onboarded = localStorage.getItem('artdrop_onboarded');
@@ -776,80 +809,65 @@ function startTutorial() {
 }
 
 function showTutorialStep() {
-    if (tutorialStep >= TUTORIAL_STEPS.length) {
-        finishTutorial();
-        return;
-    }
-    
-    const step = TUTORIAL_STEPS[tutorialStep];
-    
-    // Блокируем все кнопки
-    document.querySelectorAll('.card, .case-btn, .profile-btn, .balance, .modal-close').forEach(el => {
-        if (el.id !== 'tutorialOverlay') {
-            el.style.pointerEvents = 'none';
-            el.style.opacity = '0.5';
+    const steps = [
+        {
+            title: '👋 ДОБРО ПОЖАЛОВАТЬ!',
+            text: 'Это ArtDrop — кейс-открыватор в Telegram!\n\nДавай я покажу тебе, как всё работает.',
+            action: 'next'
+        },
+        {
+            title: '🎁 ОТКРОЙ КЕЙС!',
+            text: 'Нажми на карточку "КЕЙСЫ", затем на кнопку "🥫 BOMJ" — это самый дешёвый кейс.',
+            action: 'open_cases'
+        },
+        {
+            title: '📦 ПОСМОТРИ СКИН!',
+            text: 'Отлично! Ты получил скин. Теперь зайди в инвентарь, чтобы посмотреть его.',
+            action: 'go_inventory'
+        },
+        {
+            title: '💰 ПРОДАЙ СКИН!',
+            text: 'Нажми "ПРОДАТЬ" рядом со скином, чтобы получить монеты.',
+            action: 'sell_item'
+        },
+        {
+            title: '👤 ПРОФИЛЬ',
+            text: 'Нажми на аватарку в правом верхнем углу, чтобы посмотреть свой профиль.',
+            action: 'go_profile'
+        },
+        {
+            title: '🎉 ТЫ ГОТОВ!',
+            text: 'Теперь ты знаешь основы ArtDrop!\n\nУдачи! 🚀',
+            action: 'finish'
         }
+    ];
+    
+    // Блокируем кнопки во время обучения
+    document.querySelectorAll('.card, .case-btn, .profile-btn').forEach(el => {
+        el.style.pointerEvents = 'none';
+        el.style.opacity = '0.5';
     });
     
-    // Разблокируем для конкретного шага
-    if (step.action === 'open_cases') {
-        document.querySelectorAll('.card').forEach(el => {
-            if (el.querySelector('.card-title')?.textContent.includes('КЕЙСЫ')) {
-                el.style.pointerEvents = 'auto';
-                el.style.opacity = '1';
-                el.style.borderColor = '#ffd700';
-                el.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
-            }
-        });
-    }
-    
-    if (step.action === 'click_case') {
-        document.querySelectorAll('#casesList .case-btn').forEach(el => {
-            if (el.textContent.includes('BOMJ')) {
-                el.style.pointerEvents = 'auto';
-                el.style.opacity = '1';
-                el.style.borderColor = '#ffd700';
-                el.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
-            }
-        });
-    }
-    
-    if (step.action === 'click_sell') {
-        document.querySelectorAll('.inventory-item .btn-sell').forEach(el => {
-            el.style.pointerEvents = 'auto';
-            el.style.opacity = '1';
-            el.style.borderColor = '#ffd700';
-        });
-    }
-    
-    if (step.action === 'open_profile') {
-        const avatar = document.querySelector('.profile-btn');
-        if (avatar) {
-            avatar.style.pointerEvents = 'auto';
-            avatar.style.opacity = '1';
-            avatar.style.borderColor = '#ffd700';
-            avatar.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
-        }
-    }
-    
+    const step = steps[tutorialStep];
     showModal(step.title, `
         <div style="text-align:center;padding:10px 0;">
-            <div style="font-size:16px;color:#c0c0c0;line-height:1.8;text-align:left;white-space:pre-wrap;padding:8px 0;">${step.text}</div>
-            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
-                <button class="case-btn primary" onclick="executeTutorialAction('${step.action}')" style="pointer-events:auto !important;opacity:1 !important;">${step.button}</button>
-                <button class="case-btn" onclick="skipTutorial()" style="background:rgba(255,255,255,0.05);pointer-events:auto !important;opacity:1 !important;">⏭️ ПРОПУСТИТЬ ОБУЧЕНИЕ</button>
-            </div>
+            <div style="font-size:16px;color:#c0c0c0;line-height:1.8;white-space:pre-wrap;padding:8px 0;">${step.text}</div>
+            <button class="case-btn primary" onclick="tutorialAction('${step.action}')">
+                ${tutorialStep === steps.length - 1 ? '✅ НАЧАТЬ ИГРУ!' : '➡️ ДАЛЕЕ'}
+            </button>
+            <button class="case-btn" onclick="skipTutorial()" style="background:rgba(255,255,255,0.05);">
+                ⏭️ ПРОПУСТИТЬ
+            </button>
         </div>
     `);
 }
 
-function executeTutorialAction(action) {
+function tutorialAction(action) {
+    closeModal();
+    
     switch(action) {
         case 'open_cases':
-            closeModal();
-            setTimeout(() => {
-                showToast('👆 Нажми на карточку "КЕЙСЫ"', 'info', 5000);
-            }, 300);
+            // Разблокируем только кнопку "КЕЙСЫ"
             document.querySelectorAll('.card').forEach(el => {
                 if (el.querySelector('.card-title')?.textContent.includes('КЕЙСЫ')) {
                     el.style.pointerEvents = 'auto';
@@ -858,62 +876,28 @@ function executeTutorialAction(action) {
                     el.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
                 }
             });
-            break;
-            
-        case 'click_case':
-            closeModal();
-            document.querySelectorAll('#casesList .case-btn').forEach(el => {
-                if (el.textContent.includes('BOMJ')) {
-                    el.style.pointerEvents = 'auto';
-                    el.style.opacity = '1';
-                    el.style.borderColor = '#ffd700';
-                    el.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
-                    const origOnclick = el.onclick;
-                    el.onclick = function(e) {
-                        if (tutorialActive && tutorialStep === 1) {
-                            tutorialCaseOpened = true;
-                            origOnclick.call(this, e);
-                            setTimeout(() => {
-                                if (tutorialStep === 1) {
-                                    tutorialStep = 2;
-                                    setTimeout(showTutorialStep, 500);
-                                }
-                            }, 3000);
-                        }
-                    };
-                }
-            });
-            showToast('👆 Нажми на кнопку "🥫 BOMJ"', 'info', 5000);
+            showToast('👆 Нажми на карточку "КЕЙСЫ"', 'info', 5000);
             break;
             
         case 'go_inventory':
-            closeModal();
+            showScreen('inventory');
             setTimeout(() => {
-                if (document.getElementById('inventory-screen').style.display === 'block') {
-                    tutorialStep = 3;
-                    setTimeout(showTutorialStep, 500);
-                } else {
-                    showScreen('inventory');
-                    setTimeout(() => {
-                        tutorialStep = 3;
-                        setTimeout(showTutorialStep, 500);
-                    }, 1000);
-                }
-            }, 300);
+                tutorialStep = 3;
+                setTimeout(showTutorialStep, 500);
+            }, 1000);
             break;
             
-        case 'click_sell':
-            closeModal();
+        case 'sell_item':
+            // Разблокируем кнопки продажи в инвентаре
             document.querySelectorAll('.inventory-item .btn-sell').forEach(el => {
                 el.style.pointerEvents = 'auto';
                 el.style.opacity = '1';
                 el.style.borderColor = '#ffd700';
             });
-            showToast('👆 Нажми кнопку "ПРОДАТЬ" на своём скине', 'info', 5000);
+            showToast('👆 Нажми "ПРОДАТЬ" на скине', 'info', 5000);
             break;
             
-        case 'open_profile':
-            closeModal();
+        case 'go_profile':
             const avatar = document.querySelector('.profile-btn');
             if (avatar) {
                 avatar.style.pointerEvents = 'auto';
@@ -921,34 +905,19 @@ function executeTutorialAction(action) {
                 avatar.style.borderColor = '#ffd700';
                 avatar.style.boxShadow = '0 0 30px rgba(255,215,0,0.3)';
             }
-            showToast('👆 Нажми на аватарку в правом верхнем углу', 'info', 5000);
-            break;
-            
-        case 'open_friends':
-            closeModal();
-            setTimeout(() => {
-                if (document.getElementById('friends-screen').style.display === 'block') {
-                    tutorialStep = 6;
-                    setTimeout(showTutorialStep, 500);
-                } else {
-                    showScreen('friends');
-                    setTimeout(() => {
-                        tutorialStep = 6;
-                        setTimeout(showTutorialStep, 500);
-                    }, 1000);
-                }
-            }, 300);
+            showToast('👆 Нажми на аватарку', 'info', 5000);
             break;
             
         case 'finish':
-            closeModal();
-            finishTutorial();
-            break;
-            
+        case 'next':
         default:
-            closeModal();
             tutorialStep++;
-            setTimeout(showTutorialStep, 500);
+            if (tutorialStep >= 6) {
+                finishTutorial();
+            } else {
+                setTimeout(showTutorialStep, 500);
+            }
+            break;
     }
 }
 
@@ -961,7 +930,7 @@ function finishTutorial() {
     tutorialActive = false;
     localStorage.setItem('artdrop_onboarded', 'true');
     
-    document.querySelectorAll('.card, .case-btn, .profile-btn, .balance, .modal-close').forEach(el => {
+    document.querySelectorAll('.card, .case-btn, .profile-btn').forEach(el => {
         el.style.pointerEvents = 'auto';
         el.style.opacity = '1';
         el.style.borderColor = '';
@@ -1039,7 +1008,7 @@ class CaseAnimation {
         this.overlay = document.createElement('div');
         this.overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;';
         
-        const caseNames = {"bomj":"🥫 КЕЙС БОМЖ","berkut":"🦅 КЕЙС БЕРКУТ","champion":"🏆 КЕЙС ЧЕМПИОН","draft":"📦 КЕЙС DRAFT"};
+        const caseNames = {"bomj":"🥫 КЕЙС БОМЖ","berkut":"🦅 КЕЙС БЕРКУТ","champion":"🏆 КЕЙС ЧЕМПИОН","draft":"📦 КЕЙС DRAFT","m0nesy":"🧙 КЕЙС M0NESY","donk":"💀 КЕЙС DONK"};
         const title = document.createElement('div');
         title.style.cssText = 'color:#ffd700;font-size:22px;font-weight:700;margin-bottom:20px;letter-spacing:3px;text-shadow:0 0 20px rgba(255,215,0,0.3);';
         title.textContent = caseNames[this.caseName] || 'КЕЙС';
@@ -1083,12 +1052,8 @@ class CaseAnimation {
     startSpin() { this.nextSkin(); }
     
     getSpeed(progress) {
-        if (progress < 0.1) {
-            return 1.0;
-        }
-        if (progress < 0.8) {
-            return 0.8 - (progress - 0.1) * 0.3;
-        }
+        if (progress < 0.1) return 1.0;
+        if (progress < 0.8) return 0.8 - (progress - 0.1) * 0.3;
         const t = (progress - 0.8) / 0.2;
         const bounce = 1 + 0.2 * Math.exp(-4 * t) * Math.cos(8 * t);
         return Math.max(0.05, bounce * (1 - t * 0.9));
@@ -1312,8 +1277,7 @@ class WheelAnimation {
         const baseSpeed = 65;
         const currentSpeed = baseSpeed / Math.max(speedFactor, 0.05);
         
-        const blurAmount = Math.min(12, speedFactor * 8);
-        this.prizesLayer.style.filter = `blur(${blurAmount}px)`;
+        this.prizesLayer.style.filter = `blur(${Math.min(12, speedFactor * 8)}px)`;
         
         this.currentPrizeLabel.style.transition = 'opacity 0.05s';
         this.currentPrizeLabel.style.opacity = '0';
@@ -1446,131 +1410,9 @@ class UpgradeAnimation {
     }
 }
 
-// ============ ЕЖЕДНЕВНАЯ НАГРАДА ============
-function checkDailyReward() {
-    fetch(`/api/miniapp_profile?user_id=${userId}`)
-    .then(res => res.json())
-    .then(data => {
-        if (data.daily_reward_day) {
-            dailyRewardDay = data.daily_reward_day;
-            const lastDate = data.daily_reward_last;
-            const today = new Date().toISOString().split('T')[0];
-            dailyRewardClaimed = (lastDate === today);
-        }
-        updateDailyButton();
-    })
-    .catch(() => {});
-}
+// ============ ОСТАЛЬНЫЕ ФУНКЦИИ (КЕЙСЫ, ИНВЕНТАРЬ, ПРОФИЛЬ, КОЛЕСО, ТОП, ДРУЗЬЯ, АЧИВКИ, АПГРЕЙД, АДМИН) ============
 
-function updateDailyButton() {
-    const btn = document.getElementById('dailyRewardBtn');
-    if (!btn) return;
-    if (dailyRewardClaimed) {
-        btn.innerHTML = '<div class="card-icon">✅</div><div class="card-title">НАГРАДА ПОЛУЧЕНА</div><div class="card-sub">Возвращайтесь завтра</div>';
-        btn.style.opacity = '0.5';
-        btn.style.pointerEvents = 'none';
-    } else {
-        const rewards = {1:500,2:750,3:1000,4:1250,5:1500,6:2500,7:3000};
-        const day = dailyRewardDay || 0;
-        const nextDay = day + 1 > 7 ? 1 : day + 1;
-        const reward = rewards[nextDay] || 500;
-        btn.innerHTML = `<div class="card-icon">🎁</div><div class="card-title">ДЕНЬ ${nextDay} — ${reward} 🪙</div><div class="card-sub">Заберите награду</div>`;
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = 'auto';
-    }
-}
-
-function claimDailyReward() {
-    if (dailyRewardClaimed) {
-        showModal('❌ УЖЕ ПОЛУЧЕНО', 'Вы уже получили награду сегодня');
-        return;
-    }
-    fetch('/api/daily_reward', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({user_id: userId})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            dailyRewardClaimed = true;
-            const rewards = {1:500,2:750,3:1000,4:1250,5:1500,6:2500,7:3000};
-            const day = data.day;
-            const reward = rewards[day] || 500;
-            showToast(`🎁 Ежедневная награда! День ${day} — +${reward} 🪙`, 'success', 8000);
-            loadBalance();
-            updateDailyButton();
-        } else {
-            showModal('❌ ОШИБКА', data.error || 'Не удалось получить награду');
-        }
-    })
-    .catch(() => showModal('❌ ОШИБКА', 'Ошибка соединения'));
-}
-
-// ============ ПОДПИСКА НА КАНАЛ ============
-function checkSubscription() {
-    if (!userId) {
-        showModal('Ошибка', 'Пожалуйста, войдите в систему');
-        return;
-    }
-    showModal('📺 ПРОВЕРКА ПОДПИСКИ', `
-        <div style="text-align:center;padding:10px 0;">
-            <div style="font-size:16px;color:#ffd700;padding:8px 0;">1. Подпишись на канал: <strong>@ARTCSSKINS</strong></div>
-            <button class="case-btn" onclick="window.open('https://t.me/ARTCSSKINS','_blank')" style="margin:10px 0;">📺 ПЕРЕЙТИ В КАНАЛ</button>
-            <div style="font-size:14px;color:#6a7a8e;padding:8px 0;">2. После подписки нажми кнопку проверки</div>
-            <button class="case-btn primary" onclick="verifySubscription()" style="margin:10px 0;">✅ ПРОВЕРИТЬ ПОДПИСКУ</button>
-            <button class="case-btn" onclick="closeModal()">❌ ЗАКРЫТЬ</button>
-        </div>
-    `);
-}
-
-function verifySubscription() {
-    if (!userId) {
-        showModal('Ошибка', 'Пожалуйста, войдите в систему');
-        return;
-    }
-    document.getElementById('modalBody').innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:24px;">⏳</div><div style="color:#6a7a8e;padding:10px 0;">Проверяем подписку...</div></div>';
-    fetch('/api/check_subscription', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({user_id: userId})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            showModal('❌ Ошибка', data.error);
-            return;
-        }
-        if (data.subscribed) {
-            if (data.already_rewarded) {
-                showModal('ℹ️ УЖЕ ПОЛУЧЕНО', data.message);
-            } else {
-                showToast(`🎉 Подписка подтверждена! +${data.reward} 🪙`, 'success', 8000);
-                showModal('🎉 ПОЗДРАВЛЯЮ!', `
-                    <div style="text-align:center;">
-                        <div style="font-size:40px;margin:10px 0;">🎉</div>
-                        <div style="font-size:20px;font-weight:700;color:#ffd700;">+${data.reward} 🪙</div>
-                        <div style="color:#6a7a8e;font-size:14px;padding:8px 0;">${data.message}</div>
-                        <button class="case-btn primary" onclick="closeModal();loadBalance();">✅ ОК</button>
-                    </div>
-                `);
-                loadBalance();
-            }
-        } else {
-            showModal('❌ НЕ ПОДПИСАН', `
-                <div style="text-align:center;">
-                    <div style="color:#ff6b6b;font-size:16px;padding:8px 0;">${data.message}</div>
-                    <button class="case-btn" onclick="window.open('https://t.me/ARTCSSKINS','_blank')">📺 ПЕРЕЙТИ В КАНАЛ</button>
-                    <button class="case-btn primary" onclick="verifySubscription()">🔄 ПРОВЕРИТЬ СНОВА</button>
-                    <button class="case-btn" onclick="closeModal()">❌ ЗАКРЫТЬ</button>
-                </div>
-            `);
-        }
-    })
-    .catch(() => showModal('❌ Ошибка', 'Не удалось проверить подписку. Попробуй позже.'));
-}
-
-// ============ КЕЙСЫ ============
+// КЕЙСЫ
 function loadCases() {
     const list = document.getElementById('casesList');
     if (!list) return;
@@ -1579,6 +1421,8 @@ function loadCases() {
         <button class="case-btn" onclick="openCase('berkut', 1500)"><div style="font-weight:700;">🦅 BERKUT</div><div style="font-size:14px;color:#6a7a8e;">1500 🪙</div></button>
         <button class="case-btn" onclick="openCase('champion', 5000)"><div style="font-weight:700;">🏆 CHAMPION</div><div style="font-size:14px;color:#6a7a8e;">5000 🪙</div></button>
         <button class="case-btn" onclick="openCase('draft', 7000)"><div style="font-weight:700;">📦 DRAFT</div><div style="font-size:14px;color:#6a7a8e;">7000 🪙</div></button>
+        <button class="case-btn" onclick="openCase('m0nesy', 10000)"><div style="font-weight:700;">🧙 M0NESY</div><div style="font-size:14px;color:#6a7a8e;">10000 🪙</div></button>
+        <button class="case-btn" onclick="openCase('donk', 15000)"><div style="font-weight:700;">💀 DONK</div><div style="font-size:14px;color:#6a7a8e;">15000 🪙</div></button>
     `;
 }
 
@@ -1652,8 +1496,7 @@ function sellItemFromResult(itemName, itemPrice) {
     });
 }
 
-// ============ ИНВЕНТАРЬ ============
-
+// ИНВЕНТАРЬ
 function loadInventory() {
     const list = document.getElementById('inventoryList');
     if (!list) return;
@@ -1671,7 +1514,6 @@ function loadInventory() {
             let html = '';
             let total = 0;
             
-            // Кнопки управления
             html += `
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
                     <button class="case-btn" onclick="toggleSelectMode()" id="selectModeBtn" style="flex:1;min-width:80px;padding:10px;margin:0;background:rgba(255,215,0,0.1);">✅ ВЫБРАТЬ</button>
@@ -1708,12 +1550,10 @@ function loadInventory() {
             html += `</div>`;
             list.innerHTML = html;
             
-            // Если есть предметы — показываем чекбоксы
             if (data.items.length > 0 && !selectMode) {
                 document.querySelectorAll('.item-checkbox').forEach(el => el.style.display = 'none');
             }
             
-            // Обновляем чекбоксы
             updateCheckboxes();
             
             if (tutorialActive && tutorialStep === 3) {
@@ -1866,7 +1706,7 @@ function sellAll() {
     });
 }
 
-// ============ ВЫВОД ============
+// ВЫВОД
 function withdrawItem(itemId, name, price) {
     fetch(`/api/miniapp_profile?user_id=${userId}`)
     .then(res => res.json())
@@ -1959,7 +1799,7 @@ function checkWithdrawStatus() {
     .catch(() => {});
 }
 
-// ============ ПРОФИЛЬ ============
+// ПРОФИЛЬ
 function loadProfile() {
     const content = document.getElementById('profileContent');
     if (!content) return;
@@ -1977,8 +1817,12 @@ function loadProfile() {
         }
         const isAdminUser = data.is_admin || false;
         const isFrozen = data.is_frozen || 0;
+        const isPrime = data.is_prime || false;
+        const primeBadge = isPrime ? '👑 ' : '';
+        
         content.innerHTML = `
-            <div style="text-align:center;font-size:32px;font-weight:700;color:#ffd700;padding:8px 0;">${data.username || username} ${isAdminUser ? '✅ 👑' : ''}</div>
+            <div style="text-align:center;font-size:32px;font-weight:700;color:#ffd700;padding:8px 0;">${primeBadge}${data.username || username} ${isAdminUser ? '✅ 👑' : ''}</div>
+            <div style="text-align:center;font-size:14px;color:#6a7a8e;padding:4px 0;">${isPrime ? '👑 Прайм-подписка активна' : ''}</div>
             <div style="text-align:center;font-size:14px;color:#6a7a8e;padding:4px 0;">${isAdminUser ? '⭐ Подтверждённый аккаунт' : ''}</div>
             <div style="text-align:center;font-size:16px;color:#ff4444;padding:4px 0;font-weight:700;">${isFrozen ? '❄️ АККАУНТ ЗАМОРОЖЕН' : ''}</div>
             <div class="profile-field"><span class="label">🆔 Telegram ID</span><span class="value">${userId}</span></div>
@@ -1989,10 +1833,12 @@ function loadProfile() {
             <div class="profile-field"><span class="label">💔 Поражений</span><span class="value">${data.losses || 0}</span></div>
             <div class="profile-field"><span class="label">👥 Рефералов</span><span class="value">${data.referrals || 0}</span></div>
             <div class="profile-field"><span class="label">💰 Депозит</span><span class="value">${data.total_deposit || 0} RUB</span></div>
+            <div class="profile-field"><span class="label">📅 Стрик</span><span class="value">${data.daily_streak || 0} дней</span></div>
             <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
                 <button class="case-btn" onclick="showDeposit()">💳 ПОПОЛНИТЬ</button>
                 <button class="case-btn" onclick="showReferral()">🔗 РЕФЕРАЛЬНАЯ ССЫЛКА</button>
                 <button class="case-btn" onclick="showSupport()">🆘 ПОДДЕРЖКА</button>
+                <button class="case-btn" onclick="subscribePrime()" style="border-color:#ffd700;">👑 ПРАЙМ-ПОДПИСКА</button>
                 <button class="case-btn" onclick="showLanguageSettings()">🌐 ЯЗЫК</button>
                 <button class="case-btn" onclick="showTerms()">📜 ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ</button>
                 <button class="case-btn" onclick="logout()">🚪 ВЫХОД</button>
@@ -2022,7 +1868,7 @@ function showTerms() {
     `);
 }
 
-// ============ ЯЗЫК ============
+// ЯЗЫК
 function showLanguageSettings() {
     showModal('🌐 ЯЗЫК / TIL', `
         <div style="display:flex;flex-direction:column;gap:10px;padding:10px 0;">
@@ -2058,6 +1904,8 @@ function showReferral() {
     showModal('🔗 РЕФЕРАЛЬНАЯ ССЫЛКА', `
         <div style="text-align:center;">
             <div style="word-break:break-all;font-size:14px;padding:8px;background:rgba(0,0,0,0.3);border-radius:8px;border:1px solid #ffd700;">${link}</div>
+            <div style="color:#6a7a8e;font-size:12px;padding:4px 0;">💰 Пригласивший: +5000 🪙</div>
+            <div style="color:#6a7a8e;font-size:12px;padding:4px 0;">💰 Новый игрок: +3000 🪙 (сверх стартовых 500)</div>
             <button class="case-btn primary" onclick="copyText('${link}')">📋 КОПИРОВАТЬ</button>
             <button class="case-btn" onclick="closeModal()">❌ ЗАКРЫТЬ</button>
         </div>
@@ -2086,7 +1934,7 @@ function logout() {
     else window.location.href = '/';
 }
 
-// ============ КОЛЕСО ============
+// КОЛЕСО
 function loadWheelStatus() {
     fetch(`/api/miniapp_profile?user_id=${userId}`)
     .then(res => res.json())
@@ -2135,108 +1983,7 @@ function spinWheel() {
     });
 }
 
-// ============ PVP ============
-function cyclePvpCase() {
-    pvpCaseIndex = (pvpCaseIndex + 1) % pvpCases.length;
-    const c = pvpCases[pvpCaseIndex];
-    const btn = document.getElementById('pvpCaseBtn');
-    if (btn) btn.textContent = c.label;
-}
-
-function findPvpOpponent() {
-    const btn = document.getElementById('pvpSearchBtn');
-    btn.disabled = true;
-    btn.textContent = '⏳ ПОИСК...';
-    if (tg) tg.HapticFeedback.impactOccurred('medium');
-    document.getElementById('pvpStatus').textContent = '🔍 Поиск соперника...';
-    document.getElementById('pvpResult').textContent = '';
-    const caseName = pvpCases[pvpCaseIndex].name;
-    fetch('/api/pvp_find', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({user_id: userId, case_name: caseName})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.waiting) {
-            document.getElementById('pvpStatus').textContent = '⏳ Ожидание соперника...';
-            let attempts = 0;
-            const interval = setInterval(() => {
-                attempts++;
-                if (attempts > 20) {
-                    clearInterval(interval);
-                    btn.disabled = false;
-                    btn.textContent = '🔍 НАЙТИ СОПЕРНИКА';
-                    document.getElementById('pvpStatus').textContent = '❌ Соперник не найден';
-                    return;
-                }
-                fetch(`/api/pvp_status?battle_id=${data.battle_id}`)
-                .then(res => res.json())
-                .then(status => {
-                    if (status.status === 'active') {
-                        clearInterval(interval);
-                        startPvpBattle(data.battle_id);
-                    }
-                });
-            }, 3000);
-        } else if (data.success) {
-            startPvpBattle(data.battle_id);
-        } else {
-            btn.disabled = false;
-            btn.textContent = '🔍 НАЙТИ СОПЕРНИКА';
-            document.getElementById('pvpStatus').textContent = data.error || '❌ Ошибка';
-        }
-    })
-    .catch(() => {
-        btn.disabled = false;
-        btn.textContent = '🔍 НАЙТИ СОПЕРНИКА';
-        document.getElementById('pvpStatus').textContent = '❌ Ошибка соединения';
-    });
-}
-
-function startPvpBattle(battleId) {
-    document.getElementById('pvpStatus').textContent = '⚔️ Битва начинается...';
-    fetch('/api/pvp_start', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({battle_id: battleId, user_id: userId, case_name: pvpCases[pvpCaseIndex].name})
-    })
-    .then(res => res.json())
-    .then(data => {
-        document.getElementById('pvpStatus').textContent = `🎯 Ваш скин: ${data.skin} (${data.price} 🪙)`;
-        let attempts = 0;
-        const interval = setInterval(() => {
-            attempts++;
-            if (attempts > 30) {
-                clearInterval(interval);
-                document.getElementById('pvpSearchBtn').disabled = false;
-                document.getElementById('pvpSearchBtn').textContent = '🔍 НАЙТИ СОПЕРНИКА';
-                document.getElementById('pvpStatus').textContent = '⏱️ Таймаут битвы';
-                return;
-            }
-            fetch(`/api/pvp_status?battle_id=${battleId}`)
-            .then(res => res.json())
-            .then(status => {
-                if (status.winner_id) {
-                    clearInterval(interval);
-                    document.getElementById('pvpSearchBtn').disabled = false;
-                    document.getElementById('pvpSearchBtn').textContent = '🔍 НАЙТИ СОПЕРНИКА';
-                    if (status.winner_id == userId) {
-                        document.getElementById('pvpResult').textContent = `🏆 ПОБЕДА! +${status.price2} 🪙!`;
-                        showToast(`🏆 Победа в PVP! +${status.price2} 🪙`, 'success', 8000);
-                        loadBalance();
-                    } else {
-                        document.getElementById('pvpResult').textContent = '💔 ПОРАЖЕНИЕ! Вы потеряли скин';
-                        showToast('💔 Поражение в PVP! Скин потерян', 'error', 6000);
-                        loadBalance();
-                    }
-                }
-            });
-        }, 1000);
-    });
-}
-
-// ============ ТОП ============
+// ТОП
 function loadTopPlayers() {
     const list = document.getElementById('topList');
     const userPlace = document.getElementById('userPlace');
@@ -2291,7 +2038,7 @@ function loadTopPlayers() {
     });
 }
 
-// ============ ДРУЗЬЯ ============
+// ДРУЗЬЯ
 function searchFriends() {
     const input = document.getElementById('friendSearchInput');
     const results = document.getElementById('friendSearchResults');
@@ -2483,7 +2230,7 @@ function viewFriendInventory(friendId) {
     .catch(() => showModal('❌ ОШИБКА', 'Не удалось загрузить инвентарь'));
 }
 
-// ============ АЧИВКИ ============
+// АЧИВКИ
 function loadAchievements() {
     const list = document.getElementById('achievementsList');
     if (!list) return;
@@ -2497,6 +2244,7 @@ function loadAchievements() {
                 const progress = ach.progress || 0;
                 const target = ach.target || 100;
                 const percent = Math.min((progress / target) * 100, 100);
+                const isClaimed = ach.claimed || false;
                 html += `
                     <div class="inventory-item" style="flex-direction:column;align-items:stretch;gap:4px;">
                         <div style="display:flex;justify-content:space-between;">
@@ -2507,16 +2255,128 @@ function loadAchievements() {
                         <div style="background:rgba(255,255,255,0.05);border-radius:8px;height:6px;overflow:hidden;">
                             <div style="background:${ach.done ? '#ffd700' : 'rgba(255,215,0,0.3)'};width:${percent}%;height:100%;border-radius:8px;transition:width 0.5s;"></div>
                         </div>
-                        <div style="font-size:11px;color:#6a7a8e;text-align:right;">${progress}/${target}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div style="font-size:11px;color:#6a7a8e;">${progress}/${target}</div>
+                            ${ach.done && !isClaimed ? `<button class="btn-sell" onclick="claimAchievement(${ach.id})">💰 ПОЛУЧИТЬ</button>` : ''}
+                            ${isClaimed ? '<span style="color:#6a7a8e;font-size:11px;">✅ Получено</span>' : ''}
+                        </div>
                     </div>
                 `;
             });
+            // Кнопка "Получить все"
+            const hasUnclaimed = data.achievements.some(a => a.done && !a.claimed);
+            if (hasUnclaimed) {
+                html = `
+                    <button class="case-btn primary" onclick="claimAllAchievements()" style="margin-bottom:12px;">🎁 ПОЛУЧИТЬ ВСЕ</button>
+                    ${html}
+                `;
+            }
             list.innerHTML = html;
         } else {
             list.innerHTML = '<div style="text-align:center;color:#6a7a8e;padding:30px 0;">🏅 Нет достижений</div>';
         }
     })
     .catch(() => list.innerHTML = '<div style="text-align:center;color:#ff4444;padding:30px 0;">❌ Ошибка соединения</div>');
+}
+
+function claimAchievement(achId) {
+    fetch('/api/claim_achievement', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId, achievement_id: achId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`🎉 Получено ${data.reward} 🪙!`, 'success', 5000);
+            loadBalance();
+            loadAchievements();
+        } else {
+            showModal('❌ ОШИБКА', data.error || 'Не удалось получить награду');
+        }
+    });
+}
+
+function claimAllAchievements() {
+    fetch('/api/claim_all_achievements', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`🎉 Получено ${data.total} 🪙 за ${data.count} достижений!`, 'success', 6000);
+            loadBalance();
+            loadAchievements();
+        } else {
+            showModal('❌ ОШИБКА', data.error || 'Не удалось получить награды');
+        }
+    });
+}
+
+// ============ ЕЖЕДНЕВНАЯ НАГРАДА ============
+function checkDailyReward() {
+    fetch(`/api/miniapp_profile?user_id=${userId}`)
+    .then(res => res.json())
+    .then(data => {
+        if (data.daily_reward_day) {
+            dailyRewardDay = data.daily_reward_day;
+            const lastDate = data.daily_reward_last;
+            const today = new Date().toISOString().split('T')[0];
+            dailyRewardClaimed = (lastDate === today);
+        }
+        updateDailyButton();
+    })
+    .catch(() => {});
+}
+
+function updateDailyButton() {
+    const btn = document.getElementById('dailyRewardBtn');
+    if (!btn) return;
+    if (dailyRewardClaimed) {
+        btn.innerHTML = '<div class="card-icon">✅</div><div class="card-title">НАГРАДА ПОЛУЧЕНА</div><div class="card-sub">Возвращайтесь завтра</div>';
+        btn.style.opacity = '0.5';
+        btn.style.pointerEvents = 'none';
+    } else {
+        const rewards = {1:500,2:750,3:1000,4:1250,5:1500,6:2500,7:3000};
+        const day = dailyRewardDay || 0;
+        const nextDay = day + 1 > 7 ? 1 : day + 1;
+        const reward = rewards[nextDay] || 500;
+        btn.innerHTML = `<div class="card-icon">🎁</div><div class="card-title">ДЕНЬ ${nextDay} — ${reward} 🪙</div><div class="card-sub">Заберите награду</div>`;
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+    }
+}
+
+function claimDailyReward() {
+    if (dailyRewardClaimed) {
+        showModal('❌ УЖЕ ПОЛУЧЕНО', 'Вы уже получили награду сегодня');
+        return;
+    }
+    fetch('/api/daily_reward', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: userId})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            dailyRewardClaimed = true;
+            const rewards = {1:500,2:750,3:1000,4:1250,5:1500,6:2500,7:3000};
+            const day = data.day;
+            const reward = rewards[day] || 500;
+            const bonus = data.bonus || 0;
+            let msg = `День ${day} — +${reward} 🪙`;
+            if (bonus > 0) msg += `\n🎉 Бонус за 30 дней: +${bonus} 🪙!`;
+            showToast(`🎁 Ежедневная награда! ${msg}`, 'success', 8000);
+            loadBalance();
+            updateDailyButton();
+        } else {
+            showModal('❌ ОШИБКА', data.error || 'Не удалось получить награду');
+        }
+    })
+    .catch(() => showModal('❌ ОШИБКА', 'Ошибка соединения'));
 }
 
 // ============ ПРОМОКОДЫ ============
@@ -2885,61 +2745,16 @@ function showAdminPanelContent(content) {
     `;
 }
 
-function adminChangePassword() {
-    showModal('🔑 СМЕНА ПАРОЛЯ', `
-        <div style="padding:10px 0;">
-            <div style="color:#6a7a8e;font-size:14px;padding:4px 0;">Старый пароль</div>
-            <input type="password" id="oldPassInput" placeholder="Введите старый пароль" 
-                style="width:100%;padding:12px;border:2px solid #ffd700;border-radius:12px;font-size:14px;margin:6px 0;background:rgba(0,0,0,0.3);color:#fff;">
-            <div style="color:#6a7a8e;font-size:14px;padding:4px 0;">Новый пароль</div>
-            <input type="password" id="newPassInput" placeholder="Введите новый пароль" 
-                style="width:100%;padding:12px;border:2px solid #ffd700;border-radius:12px;font-size:14px;margin:6px 0;background:rgba(0,0,0,0.3);color:#fff;">
-            <button class="case-btn primary" onclick="submitPasswordChange()">🔑 СМЕНИТЬ</button>
-            <button class="case-btn" onclick="closeModal()">❌ ОТМЕНА</button>
-        </div>
-    `);
-}
-
-function submitPasswordChange() {
-    const oldPass = document.getElementById('oldPassInput');
-    const newPass = document.getElementById('newPassInput');
-    
-    if (!oldPass || !oldPass.value || !newPass || !newPass.value) {
-        showModal('❌ ОШИБКА', 'Заполните оба поля');
-        return;
-    }
-    
-    fetch('/api/admin_change_password', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            user_id: userId,
-            old_password: oldPass.value,
-            new_password: newPass.value
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            closeModal();
-            showModal('✅ ПАРОЛЬ ИЗМЕНЁН!', data.message);
-        } else {
-            showModal('❌ ОШИБКА', data.error);
-        }
-    })
-    .catch(() => showModal('❌ ОШИБКА', 'Ошибка соединения'));
-}
-
 // ============ АДМИН-ФУНКЦИИ ============
 
 function adminUsers() {
     fetch('/api/admin/users')
     .then(res => res.json())
     .then(data => {
-        let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">👥 ИГРОКИ:</div>';
+        let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">👥 ИГРОКИ (ID, Имя, Монеты, Уровень):</div>';
         if (data.users && data.users.length > 0) {
             data.users.forEach(u => {
-                html += `<div class="inventory-item"><span>${u.username} ${u.is_frozen ? '❄️' : ''} ${u.is_banned ? '🚫' : ''}</span><span>${u.coins} 🪙</span><span>⭐ Lv.${u.level}</span></div>`;
+                html += `<div class="inventory-item"><span><strong>${u.id}</strong> | ${u.username} ${u.is_frozen ? '❄️' : ''} ${u.is_banned ? '🚫' : ''}</span><span>${u.coins} 🪙</span><span>⭐ Lv.${u.level}</span></div>`;
             });
         } else {
             html += '<div style="text-align:center;color:#6a7a8e;padding:12px 0;">Нет игроков</div>';
@@ -2958,7 +2773,7 @@ function adminFindUser() {
         let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">🔍 РЕЗУЛЬТАТЫ:</div>';
         if (data.users && data.users.length > 0) {
             data.users.forEach(u => {
-                html += `<div class="inventory-item"><span>${u.username}</span><span>${u.coins} 🪙</span><span>⭐ Lv.${u.level}</span></div>`;
+                html += `<div class="inventory-item"><span><strong>${u.id}</strong> | ${u.username}</span><span>${u.coins} 🪙</span><span>⭐ Lv.${u.level}</span></div>`;
             });
         } else {
             html += '<div style="text-align:center;color:#6a7a8e;padding:12px 0;">Пользователи не найдены</div>';
@@ -2978,7 +2793,7 @@ function adminViewProfile() {
             return;
         }
         document.getElementById('adminInfo').innerHTML = `
-            <div style="font-weight:700;color:#ffd700;padding:8px 0;">👤 ПРОФИЛЬ ${data.username}:</div>
+            <div style="font-weight:700;color:#ffd700;padding:8px 0;">👤 ПРОФИЛЬ ${data.username} (ID: ${data.id}):</div>
             <div>💰 Монет: ${data.coins}</div><div>⭐ Уровень: ${data.level}</div>
             <div>📊 Опыт: ${data.exp}</div><div>🏆 Побед: ${data.wins}</div>
             <div>💔 Поражений: ${data.losses}</div><div>💳 Депозит: ${data.deposit} RUB</div>
@@ -3132,7 +2947,7 @@ function adminForceRemoveItem() {
     .then(res => res.json()).then(data => document.getElementById('adminInfo').textContent = data.success ? '✅ Готово!' : '❌ Ошибка');
 }
 
-function adminGiveCase() { showAdminConfirm('Введите ID игрока', 'Введите кейс (bomj/berkut/champion/draft)', (uid, caseName) => {
+function adminGiveCase() { showAdminConfirm('Введите ID игрока', 'Введите кейс (bomj/berkut/champion/draft/m0nesy/donk)', (uid, caseName) => {
     fetch('/api/admin/give_case', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:parseInt(uid), case_name:caseName})})
     .then(res => res.json()).then(data => document.getElementById('adminInfo').textContent = data.success ? `✅ Готово! ${data.item} (${data.price} 🪙)` : '❌ Ошибка');
 }); }
@@ -3144,7 +2959,7 @@ function adminResetInventory() { showAdminConfirm('Введите ID игрок�
 }); }
 
 function adminSetCasePrice() {
-    const caseName = prompt('Введите кейс (bomj/berkut/champion/draft):');
+    const caseName = prompt('Введите кейс (bomj/berkut/champion/draft/m0nesy/donk):');
     if (!caseName) return;
     const price = prompt('Введите новую цену:');
     if (!price) return;
@@ -3153,7 +2968,7 @@ function adminSetCasePrice() {
 }
 
 function adminSetCaseChance() {
-    const caseName = prompt('Введите кейс (bomj/berkut/champion/draft):');
+    const caseName = prompt('Введите кейс (bomj/berkut/champion/draft/m0nesy/donk):');
     if (!caseName) return;
     const chance = prompt('Введите шанс джекпота %:');
     if (!chance) return;
@@ -3162,7 +2977,7 @@ function adminSetCaseChance() {
 }
 
 function adminToggleCase() {
-    const caseName = prompt('Введите кейс (bomj/berkut/champion/draft):');
+    const caseName = prompt('Введите кейс (bomj/berkut/champion/draft/m0nesy/donk):');
     if (!caseName) return;
     fetch('/api/admin/toggle_case', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({case_name:caseName})})
     .then(res => res.json()).then(data => document.getElementById('adminInfo').textContent = data.success ? `✅ Кейс ${data.is_active ? 'включён' : 'выключен'}` : '❌ Ошибка');
@@ -3219,7 +3034,7 @@ function adminWithdrawals() {
         let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">📤 ЗАЯВКИ НА ВЫВОД:</div>';
         if (data.requests && data.requests.length > 0) {
             data.requests.slice(0, 20).forEach(r => {
-                html += `<div class="inventory-item"><span>${r.username}</span><span>${r.item}</span><span>${r.price} 🪙</span></div>`;
+                html += `<div class="inventory-item"><span>${r.username} (ID:${r.user_id})</span><span>${r.item}</span><span>${r.price} 🪙</span></div>`;
             });
         } else {
             html += '<div style="text-align:center;color:#6a7a8e;padding:12px 0;">Нет заявок</div>';
@@ -3366,7 +3181,7 @@ function adminActiveUsers() {
         let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">🟢 АКТИВНЫЕ ИГРОКИ (10 мин):</div>';
         if (data.users && data.users.length > 0) {
             data.users.slice(0, 30).forEach(u => {
-                html += `<div class="inventory-item"><span>${u.username}</span><span>${u.last_activity}</span></div>`;
+                html += `<div class="inventory-item"><span><strong>${u.id}</strong> | ${u.username}</span><span>${u.last_activity}</span></div>`;
             });
         } else {
             html += '<div style="text-align:center;color:#6a7a8e;padding:12px 0;">Нет активных игроков</div>';
@@ -3381,7 +3196,7 @@ function adminTopCoins() {
     .then(data => {
         let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">💰 ТОП МОНЕТ:</div>';
         data.users.forEach((u, i) => {
-            html += `<div class="inventory-item"><span>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`} ${u.username}</span><span>${u.coins} 🪙</span></div>`;
+            html += `<div class="inventory-item"><span>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`} ${u.username} (ID:${u.id})</span><span>${u.coins} 🪙</span></div>`;
         });
         document.getElementById('adminInfo').innerHTML = html;
     });
@@ -3393,7 +3208,7 @@ function adminTopLevel() {
     .then(data => {
         let html = '<div style="font-weight:700;color:#ffd700;padding:8px 0;">⭐ ТОП УРОВНЕЙ:</div>';
         data.users.forEach((u, i) => {
-            html += `<div class="inventory-item"><span>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`} ${u.username}</span><span>⭐ ${u.level}</span></div>`;
+            html += `<div class="inventory-item"><span>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`} ${u.username} (ID:${u.id})</span><span>⭐ ${u.level}</span></div>`;
         });
         document.getElementById('adminInfo').innerHTML = html;
     });
